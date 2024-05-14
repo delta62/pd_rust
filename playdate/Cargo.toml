@@ -1,0 +1,7 @@
+[package]
+name = "playdate"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+playdate_sys = { path = "../playdate_sys" }
