@@ -10,6 +10,6 @@ fn init(pd: &mut Playdate) {
 
 #[pd_update]
 fn update(pd: &mut Playdate) -> FrameResult {
-    pd.log(cstr!("update"));
-    FrameResult::NoUpdate
+    pd.draw_fps(0, 0);
+    FrameResult::Update
 }
