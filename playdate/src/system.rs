@@ -1,7 +1,11 @@
 use crate::string::Pstr;
 use bitflags::bitflags;
 use core::mem::MaybeUninit;
-use playdate_sys::{LCDBitmap, PDMenuItem, PDPeripherals_kAccelerometer};
+use playdate_sys::{
+    LCDBitmap, PDButtons_kButtonA, PDButtons_kButtonB, PDButtons_kButtonDown,
+    PDButtons_kButtonLeft, PDButtons_kButtonRight, PDButtons_kButtonUp, PDMenuItem,
+    PDPeripherals_kAccelerometer,
+};
 
 macro_rules! invoke_unsafe {
     ( $self:ident, $function:ident ) => {
@@ -181,6 +185,71 @@ impl System {
         invoke_unsafe!(self, setPeripheralsEnabled, peripherals.bits())
     }
 
+    pub fn accelerometer(&self) -> AccelerometerState {
+        let mut x = 0.0;
+        let mut y = 0.0;
+        let mut z = 0.0;
+
+        invoke_unsafe!(self, getAccelerometer, &mut x, &mut y, &mut z);
+
+        AccelerometerState { x, y, z }
+    }
+
+    pub fn button_state(&self) -> Buttons {
+        let mut current = Default::default();
+        let mut pushed = Default::default();
+        let mut released = Default::default();
+
+        invoke_unsafe!(
+            self,
+            getButtonState,
+            &mut current,
+            &mut pushed,
+            &mut released
+        );
+
+        Buttons {
+            current: ButtonState::from_bits_retain(current),
+            pushed: ButtonState::from_bits_retain(pushed),
+            released: ButtonState::from_bits_retain(released),
+        }
+    }
+
+    // TODO getButtonState callback style
+
+    pub fn crank_angle(&self) -> f32 {
+        invoke_unsafe!(self, getCrankAngle)
+    }
+
+    pub fn crank_change(&self) -> f32 {
+        invoke_unsafe!(self, getCrankChange)
+    }
+
+    pub fn crank_state(&self) -> CrankState {
+        let is_docked = invoke_unsafe!(self, isCrankDocked) == 1;
+        return if is_docked {
+            CrankState::Docked
+        } else {
+            CrankState::Undocked
+        };
+    }
+
+    pub fn set_auto_lock_enabled(&self, state: AutoLockState) {
+        let disabled = state as i32;
+        invoke_unsafe!(self, setAutoLockDisabled, disabled)
+    }
+
+    pub fn set_crank_sounds_enabled(&self, state: CrankSoundState) -> CrankSoundState {
+        let disabled = state as i32;
+        let previous_value = invoke_unsafe!(self, setCrankSoundsDisabled, disabled);
+
+        return if previous_value == 0 {
+            CrankSoundState::Enabled
+        } else {
+            CrankSoundState::Disabled
+        };
+    }
+
     unsafe fn sys(&self) -> &playdate_sys::playdate_sys {
         self.ptr.as_ref().unwrap()
     }
@@ -207,4 +276,47 @@ bitflags! {
     pub struct Peripherals: u32 {
         const ACCELEROMETER = PDPeripherals_kAccelerometer;
     }
+}
+
+bitflags! {
+    pub struct ButtonState: u32 {
+        const LEFT = PDButtons_kButtonLeft;
+        const RIGHT = PDButtons_kButtonRight;
+        const UP = PDButtons_kButtonUp;
+        const DOWN = PDButtons_kButtonDown;
+        const A = PDButtons_kButtonA;
+        const B = PDButtons_kButtonB;
+    }
+}
+
+pub struct Buttons {
+    pub pushed: ButtonState,
+    pub current: ButtonState,
+    pub released: ButtonState,
+}
+
+pub struct AccelerometerState {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum CrankState {
+    Docked,
+    Undocked,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum AutoLockState {
+    Enabled = 0,
+    Disabled = 1,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum CrankSoundState {
+    Enabled = 0,
+    Disabled = 1,
 }
