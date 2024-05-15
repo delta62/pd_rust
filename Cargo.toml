@@ -3,7 +3,7 @@ resolver = "2"
 members = [
   "example_app",
   "playdate",
-  "playdate_allocator",
+  "playdate_alloc",
   "playdate_init",
   "playdate_sys",
 ]

@@ -1,7 +1,7 @@
 #![no_std]
 
 extern crate alloc;
-extern crate playdate_allocator;
+extern crate playdate_alloc;
 
 mod display;
 mod file;
