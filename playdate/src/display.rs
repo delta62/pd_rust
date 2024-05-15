@@ -58,21 +58,18 @@ impl Display {
     }
 }
 
-#[repr(i32)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum InvertedState {
     Normal = 0,
     Inverted = 1,
 }
 
-#[repr(i32)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FlipState {
     Normal = 0,
     Flipped = 1,
 }
 
-#[repr(u32)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DisplayScale {
     One = 1,

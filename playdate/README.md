@@ -14,4 +14,7 @@ is done for you via the `pd_init` macro.
 - functions starting with `get_` omit the get prefix to be more idiomatic Rust.
   For example, `get_menu_item_title()` is instead `menu_item_title()`.
 - `playdate->system->setUpdateCallback()` is not implemented
-- `playdate->system->isCrankDocked()` is implemented as `System.crank_state()`
+- `playdate->system->isCrankDocked()` is implemented as `crank_state()`
+- `playdate->system->setAutoLockDisabled()` renamed to `set_auto_lock_enabled()`
+- `playdate->system->setCrankSoundsDisabled()` renamed to
+  `set_crank_sounds_enabled()`
