@@ -188,8 +188,13 @@ name = "playdate"
 version = "0.1.0"
 dependencies = [
  "bitflags",
+ "playdate_allocator",
  "playdate_sys",
 ]
+
+[[package]]
+name = "playdate_allocator"
+version = "0.1.0"
 
 [[package]]
 name = "playdate_init"

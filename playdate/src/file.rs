@@ -1,4 +1,5 @@
 use crate::Pstr;
+use alloc::vec::Vec;
 use bitflags::bitflags;
 use core::{ffi::c_void, mem::MaybeUninit};
 use playdate_sys::{
@@ -138,7 +139,20 @@ impl File {
         }
     }
 
-    // TODO read
+    pub fn read(&mut self, len: u32) -> Result<Vec<u8>> {
+        let mut buf = Vec::with_capacity(len as usize);
+        unsafe {
+            let result =
+                self.file().read.unwrap()(self.ptr as *mut _, buf.as_mut_ptr() as *mut _, len);
+            if result == -1 {
+                let message_ptr = self.file().geterr.unwrap()();
+                let message = Pstr::from_ptr(message_ptr);
+                Err(FileError { message })
+            } else {
+                Ok(buf)
+            }
+        }
+    }
 
     pub fn seek(&mut self, pos: i32, whence: i32) -> Result<()> {
         unsafe {

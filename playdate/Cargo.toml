@@ -5,4 +5,5 @@ edition = "2021"
 
 [dependencies]
 bitflags = "2.5.0"
+playdate_allocator = { path = "../playdate_allocator" }
 playdate_sys = { path = "../playdate_sys" }
