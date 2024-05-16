@@ -1,113 +1,123 @@
-use crate::string::Pstr;
+use alloc::boxed::Box;
 use bitflags::bitflags;
-use core::mem::MaybeUninit;
+use core::{
+    ffi::{c_char, c_void, CStr},
+    mem::MaybeUninit,
+};
 use playdate_sys::{
     LCDBitmap, PDButtons_kButtonA, PDButtons_kButtonB, PDButtons_kButtonDown,
     PDButtons_kButtonLeft, PDButtons_kButtonRight, PDButtons_kButtonUp, PDMenuItem,
     PDPeripherals_kAccelerometer,
 };
 
-macro_rules! invoke_unsafe {
-    ( $self:ident, $function:ident ) => {
-        invoke_unsafe!($self, $function,)
-    };
-    ( $self:ident, $function:ident, $( $param:expr ),* $( , )? ) => {
-        unsafe {
-            let callable = $self.sys().$function.unwrap();
-            callable($( $param ),*)
-        }
-    };
+pub struct System {
+    sys_api: &'static playdate_sys::playdate_sys,
 }
 
-pub struct System {
-    ptr: *const playdate_sys::playdate_sys,
+unsafe extern "C" fn menu_item_callback<F>(user_data: *mut c_void)
+where
+    F: FnMut(),
+{
+    let callback_ptr = user_data as *mut F;
+    let callback = &mut *callback_ptr;
+    callback()
 }
 
 impl System {
-    pub(crate) fn from_ptr(ptr: *const playdate_sys::playdate_sys) -> Self {
-        Self { ptr }
+    pub(crate) fn from_ptr(sys_api: &'static playdate_sys::playdate_sys) -> Self {
+        Self { sys_api }
     }
 
-    pub fn error(&self, s: Pstr) {
-        invoke_unsafe!(self, error, s.as_ptr())
+    pub fn error(&self, s: &CStr) {
+        invoke_unsafe!(self.sys_api.error, s.as_ptr())
     }
 
-    pub fn log_to_console(&self, s: Pstr) {
-        invoke_unsafe!(self, logToConsole, s.as_ptr())
+    pub fn log_to_console(&self, s: &CStr) {
+        invoke_unsafe!(self.sys_api.logToConsole, s.as_ptr())
     }
 
-    pub fn add_menu_item<C, D>(&self, title: Pstr, callback: C, user_data: D) -> MenuItem
+    pub fn add_menu_item<C>(&self, title: &CStr, callback: C) -> ButtonMenuItem
     where
-        C: FnMut(D) + 'static,
+        C: FnMut() + 'static,
     {
-        todo!()
+        let user_data = Box::into_raw(Box::new(callback)) as _;
+        let sys_api = self.sys_api;
+        let ptr = invoke_unsafe!(
+            self.sys_api.addMenuItem,
+            title.as_ptr(),
+            Some(menu_item_callback::<C>),
+            user_data
+        );
+
+        ButtonMenuItem {
+            sys_api,
+            ptr,
+            user_data,
+        }
     }
 
-    pub fn add_checkmark_menu_item<C, D>(
+    pub fn add_checkmark_menu_item<C>(
         &self,
-        title: Pstr,
+        title: &CStr,
         checked: Checked,
         callback: C,
-        user_data: D,
-    ) -> MenuItem
+    ) -> CheckmarkMenuItem
     where
-        C: FnMut(D),
+        C: FnMut() + 'static,
     {
-        todo!()
+        let user_data = Box::into_raw(Box::new(callback)) as _;
+        let sys_api = self.sys_api;
+        let ptr = invoke_unsafe!(
+            self.sys_api.addCheckmarkMenuItem,
+            title.as_ptr(),
+            checked.into(),
+            Some(menu_item_callback::<C>),
+            user_data
+        );
+
+        CheckmarkMenuItem {
+            sys_api,
+            ptr,
+            user_data,
+        }
     }
 
-    pub fn add_options_menu_item<C, D>(
+    pub fn add_options_menu_item<C>(
         &self,
-        title: Pstr,
-        options: &[Pstr],
+        title: &CStr,
+        options: &[*const core::ffi::c_char],
         callback: C,
-        user_data: D,
-    ) -> MenuItem
+    ) -> OptionsMenuItem
     where
-        C: FnMut(D),
+        C: FnMut() + 'static,
     {
-        todo!()
-    }
+        let user_data = Box::into_raw(Box::new(callback)) as _;
+        let sys_api = self.sys_api;
+        let len = options.len();
+        let ptr = invoke_unsafe!(
+            self.sys_api.addOptionsMenuItem,
+            title.as_ptr(),
+            options.as_ptr() as _,
+            options.len() as _,
+            Some(menu_item_callback::<C>),
+            user_data
+        );
 
-    pub fn remove_menu_item(&self, menu_item: MenuItem) {
-        todo!()
-    }
-
-    pub fn remove_all_menu_items(&self) {
-        todo!()
-    }
-
-    pub fn menu_item_title(&self, menu_item: MenuItem) -> Pstr {
-        todo!()
-    }
-
-    pub fn set_menu_item_title(&self, menu_item: MenuItem, title: Pstr) {
-        todo!()
-    }
-
-    pub fn menu_item_value(&self, menu_item: MenuItem) -> i32 {
-        todo!()
-    }
-
-    pub fn set_menu_item_value(&self, menu_item: MenuItem, value: i32) {
-        todo!()
-    }
-
-    pub fn menu_item_user_data<D>(&self, menu_item: MenuItem) -> D {
-        todo!()
-    }
-
-    pub fn set_menu_item_user_data<D>(&self, menu_item: MenuItem, user_data: D) {
-        todo!()
+        OptionsMenuItem {
+            len,
+            sys_api,
+            ptr,
+            user_data,
+        }
     }
 
     pub fn current_time_milliseconds(&self) -> u32 {
-        invoke_unsafe!(self, getCurrentTimeMilliseconds)
+        invoke_unsafe!(self.sys_api.getCurrentTimeMilliseconds)
     }
 
     pub fn seconds_since_epoch(&self) -> Duration {
         let mut milliseconds = 0;
-        let seconds = invoke_unsafe!(self, getSecondsSinceEpoch, &mut milliseconds);
+        let seconds = invoke_unsafe!(self.sys_api.getSecondsSinceEpoch, &mut milliseconds);
         Duration {
             seconds,
             milliseconds,
@@ -115,38 +125,45 @@ impl System {
     }
 
     pub fn reset_elapsed_time(&self) {
-        invoke_unsafe!(self, resetElapsedTime)
+        invoke_unsafe!(self.sys_api.resetElapsedTime)
     }
 
     pub fn elapsed_time(&self) -> f32 {
-        invoke_unsafe!(self, getElapsedTime)
+        invoke_unsafe!(self.sys_api.getElapsedTime)
     }
 
     pub fn timezone_offset(&self) -> i32 {
-        invoke_unsafe!(self, getTimezoneOffset)
+        invoke_unsafe!(self.sys_api.getTimezoneOffset)
     }
 
     pub fn convert_epoch_to_datetime(&self, epoch: u32) -> DateTime {
         let mut datetime = MaybeUninit::<DateTime>::uninit();
-        invoke_unsafe!(self, convertEpochToDateTime, epoch, datetime.as_mut_ptr());
+        invoke_unsafe!(
+            self.sys_api.convertEpochToDateTime,
+            epoch,
+            datetime.as_mut_ptr()
+        );
         unsafe { datetime.assume_init() }
     }
 
     pub fn convert_datetime_to_epoch(&self, datetime: &DateTime) -> u32 {
         // Assumption: convertDateTimeToEpoch does not modify the datetime struct
-        invoke_unsafe!(self, convertDateTimeToEpoch, datetime as *const _ as *mut _)
+        invoke_unsafe!(
+            self.sys_api.convertDateTimeToEpoch,
+            datetime as *const _ as *mut _
+        )
     }
 
     pub fn should_display_24_hour_time(&self) -> bool {
-        invoke_unsafe!(self, shouldDisplay24HourTime) == 1
+        invoke_unsafe!(self.sys_api.shouldDisplay24HourTime) == 1
     }
 
     pub fn flipped(&self) -> bool {
-        invoke_unsafe!(self, getFlipped) == 1
+        invoke_unsafe!(self.sys_api.getFlipped) == 1
     }
 
     pub fn reduce_flashing(&self) -> bool {
-        invoke_unsafe!(self, getReduceFlashing) == 1
+        invoke_unsafe!(self.sys_api.getReduceFlashing) == 1
     }
 
     // TODO
@@ -155,34 +172,31 @@ impl System {
     // parseString
 
     pub fn set_menu_image(&self, bitmap: &Bitmap, x_offset: i32) {
-        invoke_unsafe!(self, setMenuImage, bitmap.0 as *mut _, x_offset)
+        invoke_unsafe!(self.sys_api.setMenuImage, bitmap.0 as *mut _, x_offset)
     }
 
-    pub fn set_serial_message_callback<F>(&self, callback: F)
-    where
-        F: FnMut(Pstr),
-    {
-        todo!()
+    pub fn set_serial_message_callback(&self, callback: extern "C" fn(*const c_char)) {
+        invoke_unsafe!(self.sys_api.setSerialMessageCallback, Some(callback))
     }
 
     pub fn draw_fps(&self, x: i32, y: i32) {
-        invoke_unsafe!(self, drawFPS, x, y)
+        invoke_unsafe!(self.sys_api.drawFPS, x, y)
     }
 
     pub fn battery_percentage(&self) -> f32 {
-        invoke_unsafe!(self, getBatteryPercentage)
+        invoke_unsafe!(self.sys_api.getBatteryPercentage)
     }
 
     pub fn battery_voltage(&self) -> f32 {
-        invoke_unsafe!(self, getBatteryVoltage)
+        invoke_unsafe!(self.sys_api.getBatteryVoltage)
     }
 
     pub fn clear_icache(&self) {
-        invoke_unsafe!(self, clearICache)
+        invoke_unsafe!(self.sys_api.clearICache)
     }
 
     pub fn set_peripherals_enabled(&self, peripherals: Peripherals) {
-        invoke_unsafe!(self, setPeripheralsEnabled, peripherals.bits())
+        invoke_unsafe!(self.sys_api.setPeripheralsEnabled, peripherals.bits())
     }
 
     pub fn accelerometer(&self) -> AccelerometerState {
@@ -190,7 +204,7 @@ impl System {
         let mut y = 0.0;
         let mut z = 0.0;
 
-        invoke_unsafe!(self, getAccelerometer, &mut x, &mut y, &mut z);
+        invoke_unsafe!(self.sys_api.getAccelerometer, &mut x, &mut y, &mut z);
 
         AccelerometerState { x, y, z }
     }
@@ -201,8 +215,7 @@ impl System {
         let mut released = Default::default();
 
         invoke_unsafe!(
-            self,
-            getButtonState,
+            self.sys_api.getButtonState,
             &mut current,
             &mut pushed,
             &mut released
@@ -218,15 +231,15 @@ impl System {
     // TODO getButtonState callback style
 
     pub fn crank_angle(&self) -> f32 {
-        invoke_unsafe!(self, getCrankAngle)
+        invoke_unsafe!(self.sys_api.getCrankAngle)
     }
 
     pub fn crank_change(&self) -> f32 {
-        invoke_unsafe!(self, getCrankChange)
+        invoke_unsafe!(self.sys_api.getCrankChange)
     }
 
     pub fn crank_state(&self) -> CrankState {
-        let is_docked = invoke_unsafe!(self, isCrankDocked) == 1;
+        let is_docked = invoke_unsafe!(self.sys_api.isCrankDocked) == 1;
         return if is_docked {
             CrankState::Docked
         } else {
@@ -235,13 +248,11 @@ impl System {
     }
 
     pub fn set_auto_lock_enabled(&self, state: AutoLockState) {
-        let disabled = state as i32;
-        invoke_unsafe!(self, setAutoLockDisabled, disabled)
+        invoke_unsafe!(self.sys_api.setAutoLockDisabled, state.into())
     }
 
     pub fn set_crank_sounds_enabled(&self, state: CrankSoundState) -> CrankSoundState {
-        let disabled = state as i32;
-        let previous_value = invoke_unsafe!(self, setCrankSoundsDisabled, disabled);
+        let previous_value = invoke_unsafe!(self.sys_api.setCrankSoundsDisabled, state.into());
 
         return if previous_value == 0 {
             CrankSoundState::Enabled
@@ -249,21 +260,135 @@ impl System {
             CrankSoundState::Disabled
         };
     }
-
-    unsafe fn sys(&self) -> &playdate_sys::playdate_sys {
-        self.ptr.as_ref().unwrap()
-    }
 }
 
 pub type DateTime = ::playdate_sys::PDDateTime;
 
-#[repr(i32)]
 pub enum Checked {
     Checked,
     Unchecked,
 }
 
-pub struct MenuItem(*const PDMenuItem);
+impl Into<i32> for Checked {
+    fn into(self) -> i32 {
+        match self {
+            Self::Unchecked => 0,
+            Self::Checked => 1,
+        }
+    }
+}
+
+trait MenuItem {
+    fn mut_ptr(&self) -> *mut PDMenuItem;
+    fn sys_api(&self) -> &'static playdate_sys::playdate_sys;
+
+    fn title(&self) -> &CStr {
+        let ptr = invoke_unsafe!(self.sys_api().getMenuItemTitle, self.mut_ptr());
+        unsafe { CStr::from_ptr(ptr) }
+    }
+
+    fn set_title(&mut self, title: &CStr) {
+        invoke_unsafe!(
+            self.sys_api().setMenuItemTitle,
+            self.mut_ptr(),
+            title.as_ptr()
+        );
+    }
+}
+
+pub struct ButtonMenuItem {
+    ptr: *mut PDMenuItem,
+    sys_api: &'static playdate_sys::playdate_sys,
+    user_data: *mut c_void,
+}
+
+pub struct CheckmarkMenuItem {
+    ptr: *mut PDMenuItem,
+    sys_api: &'static playdate_sys::playdate_sys,
+    user_data: *mut c_void,
+}
+
+pub struct OptionsMenuItem {
+    ptr: *mut PDMenuItem,
+    len: usize,
+    sys_api: &'static playdate_sys::playdate_sys,
+    user_data: *mut c_void,
+}
+
+impl CheckmarkMenuItem {
+    pub fn value(&self) -> usize {
+        invoke_unsafe!(self.sys_api.getMenuItemValue, self.ptr) as usize
+    }
+
+    pub fn set_state(&mut self, state: Checked) {
+        invoke_unsafe!(self.sys_api.setMenuItemValue, self.ptr, state.into())
+    }
+}
+
+impl OptionsMenuItem {
+    pub fn value(&self) -> usize {
+        invoke_unsafe!(self.sys_api.getMenuItemValue, self.ptr) as usize
+    }
+
+    pub fn set_value(&mut self, index: usize) {
+        if index >= self.len {
+            panic!("menu item index out of bounds")
+        }
+
+        invoke_unsafe!(self.sys_api.setMenuItemValue, self.ptr, index as i32)
+    }
+}
+
+impl MenuItem for ButtonMenuItem {
+    fn mut_ptr(&self) -> *mut PDMenuItem {
+        self.ptr
+    }
+
+    fn sys_api(&self) -> &'static playdate_sys::playdate_sys {
+        self.sys_api
+    }
+}
+
+impl MenuItem for CheckmarkMenuItem {
+    fn mut_ptr(&self) -> *mut PDMenuItem {
+        self.ptr
+    }
+
+    fn sys_api(&self) -> &'static playdate_sys::playdate_sys {
+        self.sys_api
+    }
+}
+
+impl MenuItem for OptionsMenuItem {
+    fn mut_ptr(&self) -> *mut PDMenuItem {
+        self.ptr
+    }
+
+    fn sys_api(&self) -> &'static playdate_sys::playdate_sys {
+        self.sys_api
+    }
+}
+
+impl Drop for ButtonMenuItem {
+    fn drop(&mut self) {
+        unsafe { drop(Box::from_raw(self.user_data)) };
+        invoke_unsafe!(self.sys_api.removeMenuItem, self.ptr)
+    }
+}
+
+impl Drop for CheckmarkMenuItem {
+    fn drop(&mut self) {
+        unsafe { drop(Box::from_raw(self.user_data)) };
+        invoke_unsafe!(self.sys_api.removeMenuItem, self.ptr)
+    }
+}
+
+impl Drop for OptionsMenuItem {
+    fn drop(&mut self) {
+        unsafe { drop(Box::from_raw(self.user_data)) };
+        invoke_unsafe!(self.sys_api.removeMenuItem, self.ptr)
+    }
+}
 
 pub struct Duration {
     pub seconds: u32,
@@ -308,15 +433,31 @@ pub enum CrankState {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-#[repr(i32)]
 pub enum AutoLockState {
-    Enabled = 0,
-    Disabled = 1,
+    Enabled,
+    Disabled,
+}
+
+impl Into<i32> for AutoLockState {
+    fn into(self) -> i32 {
+        match self {
+            Self::Enabled => 0,
+            Self::Disabled => 1,
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-#[repr(i32)]
 pub enum CrankSoundState {
-    Enabled = 0,
-    Disabled = 1,
+    Enabled,
+    Disabled,
+}
+
+impl Into<i32> for CrankSoundState {
+    fn into(self) -> i32 {
+        match self {
+            Self::Enabled => 0,
+            Self::Disabled => 1,
+        }
+    }
 }

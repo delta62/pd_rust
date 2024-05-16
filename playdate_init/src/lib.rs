@@ -22,7 +22,7 @@ pub fn pd_init(_attr: TokenStream, item: TokenStream) -> TokenStream {
         ) -> i32 {
             if event == ::playdate_sys::PDSystemEvent_kEventInit {
                 let api_ptr = api as *mut _;
-                let mut pd = ::playdate::Playdate::new(api);
+                let mut pd = unsafe { ::playdate::Playdate::new(api) };
 
                 unsafe {
                     let api = api.as_ref().unwrap();
@@ -57,7 +57,7 @@ pub fn pd_update(_attr: TokenStream, item: TokenStream) -> TokenStream {
             data: *mut ::core::ffi::c_void
         ) -> i32 {
             let api_pointer = data as *mut ::playdate_sys::PlaydateAPI;
-            let mut pd = ::playdate::Playdate::new(api_pointer);
+            let mut pd = unsafe { ::playdate::Playdate::new(api_pointer) };
             #ident(&mut pd) as i32
         }
     };

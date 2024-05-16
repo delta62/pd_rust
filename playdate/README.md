@@ -18,3 +18,8 @@ is done for you via the `pd_init` macro.
 - `playdate->system->setAutoLockDisabled()` renamed to `set_auto_lock_enabled()`
 - `playdate->system->setCrankSoundsDisabled()` renamed to
   `set_crank_sounds_enabled()`
+- `playdate->system->getMenuItemUserData()` and
+  `playdate->system->setMenuItemUserData()` are not implemented. To use external
+  data with menu items, pass values into the
+  provided menu item closure.
+- `playdate->system->removeAllMenuItems()` not implemented

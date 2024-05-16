@@ -1,4 +1,5 @@
-use crate::Pstr;
+use core::ffi::CStr;
+
 use playdate_sys::playdate_json;
 
 pub struct Json {
@@ -14,7 +15,7 @@ impl Json {
         todo!()
     }
 
-    pub fn decode_string(&self, decoder: (), string: Pstr) -> () {
+    pub fn decode_string(&self, decoder: (), string: &CStr) -> () {
         todo!()
     }
 
