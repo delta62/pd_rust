@@ -1,10 +1,16 @@
 use crate::display::FlipState;
+use alloc::vec::Vec;
+use playdate_alloc::libc::free;
 use playdate_sys::{
-    playdate_sprite, LCDBitmap, LCDBitmapDrawMode_kDrawModeBlackTransparent,
-    LCDBitmapDrawMode_kDrawModeCopy, LCDBitmapDrawMode_kDrawModeFillBlack,
-    LCDBitmapDrawMode_kDrawModeFillWhite, LCDBitmapDrawMode_kDrawModeInverted,
-    LCDBitmapDrawMode_kDrawModeNXOR, LCDBitmapDrawMode_kDrawModeWhiteTransparent,
-    LCDBitmapDrawMode_kDrawModeXOR, LCDSprite,
+    playdate_sprite, CollisionPoint, CollisionVector, LCDBitmap,
+    LCDBitmapDrawMode_kDrawModeBlackTransparent, LCDBitmapDrawMode_kDrawModeCopy,
+    LCDBitmapDrawMode_kDrawModeFillBlack, LCDBitmapDrawMode_kDrawModeFillWhite,
+    LCDBitmapDrawMode_kDrawModeInverted, LCDBitmapDrawMode_kDrawModeNXOR,
+    LCDBitmapDrawMode_kDrawModeWhiteTransparent, LCDBitmapDrawMode_kDrawModeXOR, LCDSprite, PDRect,
+    SpriteCollisionResponseType, SpriteCollisionResponseType_kCollisionTypeBounce,
+    SpriteCollisionResponseType_kCollisionTypeFreeze,
+    SpriteCollisionResponseType_kCollisionTypeOverlap,
+    SpriteCollisionResponseType_kCollisionTypeSlide,
 };
 
 pub struct PlaydateSprite {
@@ -32,15 +38,15 @@ impl PlaydateSprite {
         invoke_unsafe!(self.sprite_api.addDirtyRect, rect)
     }
 
-    pub fn add_sprite(&mut self, sprite: &Sprite) {
+    pub fn add_sprite<T>(&mut self, sprite: &Sprite<T>) {
         invoke_unsafe!(self.sprite_api.addSprite, sprite.ptr)
     }
 
-    pub fn remove_sprite(&mut self, sprite: &Sprite) {
-        invoke_unsafe!(self.sprite_api.removeSprite, sprite.ptr)
+    pub fn remove_sprite(&mut self, sprite: SpriteRef) {
+        invoke_unsafe!(self.sprite_api.removeSprite, sprite.0 as *mut _)
     }
 
-    pub fn remove_sprites(&mut self, sprites: &[&Sprite]) {
+    pub fn remove_sprites(&mut self, sprites: &[SpriteRef]) {
         invoke_unsafe!(
             self.sprite_api.removeSprites,
             sprites.as_ptr() as *mut _,
@@ -68,19 +74,105 @@ impl PlaydateSprite {
         invoke_unsafe!(self.sprite_api.resetCollisionWorld)
     }
 
-    // TODO querySpritesAtPoint, querySpritesInRect, querySpritesAlongLine,
-    // querySpriteInfoAlongLine, overlappingSprites, allOverlappingSprites
+    pub fn query_sprites_at_point(&self, x: f32, y: f32) -> Vec<SpriteRef> {
+        let mut len = 0;
+        let ptr = invoke_unsafe!(self.sprite_api.querySpritesAtPoint, x, y, &mut len);
+        Self::refs_from_raw_pointers(ptr, len)
+    }
+
+    pub fn query_sprites_in_rect(&self, x: f32, y: f32, width: f32, height: f32) -> Vec<SpriteRef> {
+        let mut len = 0;
+        let f = self.sprite_api.querySpritesInRect;
+        let ptr = invoke_unsafe!(f, x, y, width, height, &mut len);
+        Self::refs_from_raw_pointers(ptr, len)
+    }
+
+    pub fn query_sprites_along_line(&self, x1: f32, y1: f32, x2: f32, y2: f32) -> Vec<SpriteRef> {
+        let mut len = 0;
+        let f = self.sprite_api.querySpritesAlongLine;
+        let ptr = invoke_unsafe!(f, x1, y1, x2, y2, &mut len);
+        Self::refs_from_raw_pointers(ptr, len)
+    }
+
+    pub fn query_sprite_info_along_line(
+        &self,
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+    ) -> Vec<SpriteQueryInfo> {
+        let mut len = 0;
+        let f = self.sprite_api.querySpriteInfoAlongLine;
+        let ptr = invoke_unsafe!(f, x1, y1, x2, y2, &mut len);
+        Self::info_from_raw_pointers(ptr, len)
+    }
+
+    pub fn all_overlapping_sprites(&self) -> Vec<SpriteRef> {
+        let mut len = 0;
+        let ptr = invoke_unsafe!(self.sprite_api.allOverlappingSprites, &mut len);
+        PlaydateSprite::refs_from_raw_pointers(ptr, len)
+    }
+
+    fn info_from_raw_pointers(
+        ptr: *mut playdate_sys::SpriteQueryInfo,
+        len: i32,
+    ) -> Vec<SpriteQueryInfo> {
+        let mut vec = Vec::with_capacity(len as usize);
+
+        unsafe {
+            for i in 0..len {
+                let val = ptr.offset(i as isize);
+                let val = &(*val);
+                vec.push(SpriteQueryInfo {
+                    sprite_ref: SpriteRef(val.sprite),
+                    ti1: val.ti1,
+                    ti2: val.ti2,
+                    entry_point: val.entryPoint.into(),
+                    exit_point: val.exitPoint.into(),
+                });
+            }
+
+            free(ptr as _);
+        }
+
+        vec
+    }
+
+    fn refs_from_raw_pointers(ptr: *mut *mut LCDSprite, len: i32) -> Vec<SpriteRef> {
+        let mut vec = Vec::with_capacity(len as usize);
+        unsafe {
+            for i in 0..len {
+                let val = (*ptr).offset(i as isize);
+                let sref = SpriteRef(val);
+                vec.push(sref);
+            }
+
+            free(ptr as _);
+        }
+
+        vec
+    }
 }
 
+pub struct SpriteQueryInfo {
+    pub sprite_ref: SpriteRef,
+    pub ti1: f32,
+    pub ti2: f32,
+    pub entry_point: Point,
+    pub exit_point: Point,
+}
+
+pub struct SpriteRef(*const LCDSprite);
 pub type Rect = playdate_sys::PDRect;
 pub type IntRect = playdate_sys::LCDRect;
 
-pub struct Sprite {
-    sprite_api: &'static playdate_sprite,
+pub struct Sprite<T> {
+    data: Option<T>,
     ptr: *mut LCDSprite,
+    sprite_api: &'static playdate_sprite,
 }
 
-impl Sprite {
+impl<T> Sprite<T> {
     pub fn set_bounds(&mut self, bounds: Rect) {
         invoke_unsafe!(self.sprite_api.setBounds, self.ptr, bounds)
     }
@@ -118,16 +210,13 @@ impl Sprite {
     }
 
     pub fn set_image(&mut self, image: &Bitmap, flip: FlipState) {
-        invoke_unsafe!(
-            self.sprite_api.setImage,
-            self.ptr,
-            image.as_ptr() as *mut _,
-            flip as u32
-        )
+        let f = self.sprite_api.setImage;
+        invoke_unsafe!(f, self.ptr, image.as_mut_ptr(), flip as u32)
     }
 
-    pub fn image(&self) -> &Bitmap {
-        todo!()
+    pub fn image(&self) -> BitmapRef {
+        let ptr = invoke_unsafe!(self.sprite_api.getImage, self.ptr);
+        BitmapRef(ptr)
     }
 
     pub fn set_size(&mut self, width: f32, height: f32) {
@@ -168,18 +257,14 @@ impl Sprite {
     }
 
     pub fn set_stencil(&mut self, stencil: &Bitmap) {
-        invoke_unsafe!(
-            self.sprite_api.setStencil,
-            self.ptr,
-            stencil.as_ptr() as *mut _
-        )
+        invoke_unsafe!(self.sprite_api.setStencil, self.ptr, stencil.as_mut_ptr())
     }
 
     pub fn set_stencil_image(&mut self, stencil: &Bitmap, tile: TileMode) {
         invoke_unsafe!(
             self.sprite_api.setStencilImage,
             self.ptr,
-            stencil.as_ptr() as *mut _,
+            stencil.as_mut_ptr(),
             tile as i32
         )
     }
@@ -246,7 +331,24 @@ impl Sprite {
         )
     }
 
-    // TODO setUpdateFunction, setDrawFunction, setUserData, getUserData
+    pub fn set_update_fn(&mut self, update_fn: extern "C" fn(*mut LCDSprite)) {
+        invoke_unsafe!(self.sprite_api.setUpdateFunction, self.ptr, Some(update_fn))
+    }
+
+    pub fn set_draw_fn(
+        &mut self,
+        draw_fn: extern "C" fn(*mut LCDSprite, bounds: PDRect, drawrect: PDRect),
+    ) {
+        invoke_unsafe!(self.sprite_api.setDrawFunction, self.ptr, Some(draw_fn))
+    }
+
+    pub fn set_user_data(&mut self, data: Option<T>) {
+        self.data = data;
+    }
+
+    pub fn user_data(&self) -> Option<&T> {
+        self.data.as_ref()
+    }
 
     pub fn set_collisions_enabled(&mut self, enabled: CollisionState) {
         invoke_unsafe!(
@@ -277,34 +379,199 @@ impl Sprite {
         invoke_unsafe!(self.sprite_api.clearCollideRect, self.ptr)
     }
 
-    // TODO setCollisionResponseFunction, checkCollisions, moveWithCollisions
-}
+    pub fn set_collision_response_fn(
+        &mut self,
+        func: extern "C" fn(*mut LCDSprite, *mut LCDSprite) -> u32,
+    ) {
+        invoke_unsafe!(
+            self.sprite_api.setCollisionResponseFunction,
+            self.ptr,
+            Some(func)
+        )
+    }
 
-impl Clone for Sprite {
-    fn clone(&self) -> Self {
-        let sprite_api = self.sprite_api;
-        let ptr = invoke_unsafe!(self.sprite_api.copy, self.ptr);
-        Self { sprite_api, ptr }
+    pub fn check_collisions(&self, goal_x: f32, goal_y: f32) -> Vec<SpriteCollisionInfo> {
+        let mut len = 0;
+        let mut actual_x = 0.0;
+        let mut actual_y = 0.0;
+        let f = self.sprite_api.checkCollisions;
+        let ptr = invoke_unsafe!(
+            f,
+            self.ptr,
+            goal_x,
+            goal_y,
+            &mut actual_x,
+            &mut actual_y,
+            &mut len
+        );
+        let mut vec = Vec::with_capacity(len as usize);
+
+        unsafe {
+            for i in 0..len {
+                let val = ptr.offset(i as isize);
+                let val = &(*val);
+
+                vec.push(SpriteCollisionInfo {
+                    sprite: SpriteRef(val.sprite),
+                    other: SpriteRef(val.other),
+                    response_type: val.responseType.into(),
+                    overlaps: val.overlaps.into(),
+                    ti: val.ti,
+                    moved: val.move_.into(),
+                    normal: val.normal.into(),
+                    touch: val.touch.into(),
+                    sprite_rect: val.spriteRect.into(),
+                    other_rect: val.otherRect.into(),
+                });
+            }
+
+            free(ptr as _);
+        }
+
+        vec
+    }
+
+    pub fn move_with_collisions(&mut self, goal_x: f32, goal_y: f32) -> Vec<SpriteCollisionInfo> {
+        let mut len = 0;
+        let mut actual_x = 0.0;
+        let mut actual_y = 0.0;
+        let f = self.sprite_api.moveWithCollisions;
+        let ptr = invoke_unsafe!(
+            f,
+            self.ptr,
+            goal_x,
+            goal_y,
+            &mut actual_x,
+            &mut actual_y,
+            &mut len
+        );
+        let mut vec = Vec::with_capacity(len as usize);
+
+        unsafe {
+            for i in 0..len {
+                let val = ptr.offset(i as isize);
+                let val = &(*val);
+
+                vec.push(SpriteCollisionInfo {
+                    sprite: SpriteRef(val.sprite),
+                    other: SpriteRef(val.other),
+                    response_type: val.responseType.into(),
+                    overlaps: val.overlaps.into(),
+                    ti: val.ti,
+                    moved: val.move_.into(),
+                    normal: val.normal.into(),
+                    touch: val.touch.into(),
+                    sprite_rect: val.spriteRect.into(),
+                    other_rect: val.otherRect.into(),
+                });
+            }
+
+            free(ptr as _);
+        }
+
+        vec
+    }
+
+    pub fn overlapping_sprites(&self) -> Vec<SpriteRef> {
+        let mut len = 0;
+        let ptr = invoke_unsafe!(self.sprite_api.overlappingSprites, self.ptr, &mut len);
+        PlaydateSprite::refs_from_raw_pointers(ptr, len)
     }
 }
 
-impl Drop for Sprite {
+pub struct SpriteCollisionInfo {
+    pub sprite: SpriteRef,
+    pub other: SpriteRef,
+    pub response_type: CollisionResponse,
+    pub overlaps: SpriteOverlap,
+    pub ti: f32,
+    pub moved: Point,
+    pub normal: IntPoint,
+    pub touch: Point,
+    pub sprite_rect: Rect,
+    pub other_rect: Rect,
+}
+
+impl<T> Clone for Sprite<T>
+where
+    T: Clone,
+{
+    fn clone(&self) -> Self {
+        let sprite_api = self.sprite_api;
+        let ptr = invoke_unsafe!(self.sprite_api.copy, self.ptr);
+        let data = self.data.clone();
+        Self {
+            sprite_api,
+            ptr,
+            data,
+        }
+    }
+}
+
+#[repr(u32)]
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub enum CollisionResponse {
+    Slide = SpriteCollisionResponseType_kCollisionTypeSlide,
+    Freeze = SpriteCollisionResponseType_kCollisionTypeFreeze,
+    Overlap = SpriteCollisionResponseType_kCollisionTypeOverlap,
+    Bounce = SpriteCollisionResponseType_kCollisionTypeBounce,
+}
+
+impl From<SpriteCollisionResponseType> for CollisionResponse {
+    #[allow(non_upper_case_globals)]
+    fn from(value: SpriteCollisionResponseType) -> Self {
+        match value {
+            SpriteCollisionResponseType_kCollisionTypeSlide => Self::Slide,
+            SpriteCollisionResponseType_kCollisionTypeFreeze => Self::Freeze,
+            SpriteCollisionResponseType_kCollisionTypeOverlap => Self::Overlap,
+            SpriteCollisionResponseType_kCollisionTypeBounce => Self::Bounce,
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl<T> Drop for Sprite<T> {
     fn drop(&mut self) {
         invoke_unsafe!(self.sprite_api.freeSprite, self.ptr)
     }
 }
 
-pub struct Bitmap;
+pub struct Bitmap(*mut LCDBitmap);
 
 impl Bitmap {
-    fn as_ptr(&self) -> *const LCDBitmap {
-        todo!()
+    pub(crate) fn as_mut_ptr(&self) -> *mut LCDBitmap {
+        self.0
     }
 }
+
+pub struct BitmapRef(*const LCDBitmap);
 
 pub struct Point {
     pub x: f32,
     pub y: f32,
+}
+
+impl From<CollisionPoint> for Point {
+    fn from(value: CollisionPoint) -> Self {
+        Point {
+            x: value.x,
+            y: value.y,
+        }
+    }
+}
+
+pub struct IntPoint {
+    pub x: i32,
+    pub y: i32,
+}
+
+impl From<CollisionVector> for IntPoint {
+    fn from(value: CollisionVector) -> Self {
+        Self {
+            x: value.x,
+            y: value.y,
+        }
+    }
 }
 
 #[repr(u32)]
@@ -367,4 +634,19 @@ pub enum OffsetBehavior {
 pub enum CollisionState {
     Disabled = 0,
     Enabled = 1,
+}
+
+pub enum SpriteOverlap {
+    TunneledThrough,
+    Overlapping,
+}
+
+impl From<u8> for SpriteOverlap {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Self::TunneledThrough,
+            1 => Self::Overlapping,
+            _ => unreachable!(),
+        }
+    }
 }
