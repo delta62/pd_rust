@@ -46,8 +46,8 @@ impl PlaydateFileSystem {
             self.api.listfiles,
             path.as_ptr(),
             Some(list_file_callback::<C>),
-            data as *mut c_void,
-            list_opts.into()
+            data as _,
+            list_opts as _
         );
 
         // listing files is done, free the given closure now
@@ -56,7 +56,7 @@ impl PlaydateFileSystem {
     }
 
     pub fn unlink(&self, path: &CStr, recursive: UnlinkMode) -> Result<()> {
-        let result = invoke_unsafe!(self.api.unlink, path.as_ptr(), recursive.into());
+        let result = invoke_unsafe!(self.api.unlink, path.as_ptr(), recursive as _);
         self.fs_result_from_int(result)
     }
 
@@ -114,7 +114,7 @@ impl File {
     pub fn flush(&self) -> Result<u32> {
         let result = invoke_unsafe!(self.file_api.flush, self.ptr);
         self.fs_result(result)?;
-        Ok(result as u32)
+        Ok(result as _)
     }
 
     pub fn read(&mut self, len: u32) -> Result<Vec<u8>> {
@@ -132,7 +132,7 @@ impl File {
     pub fn tell(&self) -> Result<u32> {
         let result = invoke_unsafe!(self.file_api.tell, self.ptr);
         self.fs_result(result)?;
-        Ok(result as u32)
+        Ok(result as _)
     }
 
     pub fn write(&mut self, bytes: &[u8]) -> Result<()> {
@@ -140,7 +140,7 @@ impl File {
             self.file_api.write,
             self.ptr,
             bytes.as_ptr() as _,
-            bytes.len() as u32
+            bytes.len() as _
         );
         self.fs_result(result)
     }
@@ -159,7 +159,7 @@ impl File {
 
 impl Drop for File {
     fn drop(&mut self) {
-        let result = invoke_unsafe!(self.file_api.close, self.ptr as *mut SDFile as *mut c_void);
+        let result = invoke_unsafe!(self.file_api.close, self.ptr as *mut SDFile as _);
         // There's nothing that can be done to recover here, but getting to
         // this point indicates something significantly wrong has happened.
         // In this case, just quit.
@@ -180,30 +180,12 @@ bitflags! {
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub enum UnlinkMode {
-    NonRecursive,
-    Recursive,
-}
-
-impl Into<i32> for UnlinkMode {
-    fn into(self) -> i32 {
-        match self {
-            Self::Recursive => 1,
-            Self::NonRecursive => 0,
-        }
-    }
+    NonRecursive = 0,
+    Recursive = 1,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub enum ListOptions {
-    ShowHidden,
-    HideHidden,
-}
-
-impl Into<i32> for ListOptions {
-    fn into(self) -> i32 {
-        match self {
-            Self::ShowHidden => 1,
-            Self::HideHidden => 0,
-        }
-    }
+    HideHidden = 0,
+    ShowHidden = 1,
 }

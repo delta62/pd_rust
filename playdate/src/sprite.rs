@@ -31,7 +31,7 @@ impl PlaydateSprite {
     }
 
     pub fn set_always_redraw(&mut self, state: DrawTime) {
-        invoke_unsafe!(self.sprite_api.setAlwaysRedraw, state as i32)
+        invoke_unsafe!(self.sprite_api.setAlwaysRedraw, state as _)
     }
 
     pub fn add_dirty_rect(&mut self, rect: IntRect) {
@@ -43,14 +43,14 @@ impl PlaydateSprite {
     }
 
     pub fn remove_sprite(&mut self, sprite: SpriteRef) {
-        invoke_unsafe!(self.sprite_api.removeSprite, sprite.0 as *mut _)
+        invoke_unsafe!(self.sprite_api.removeSprite, sprite.0 as _)
     }
 
     pub fn remove_sprites(&mut self, sprites: &[SpriteRef]) {
         invoke_unsafe!(
             self.sprite_api.removeSprites,
-            sprites.as_ptr() as *mut _,
-            sprites.len() as i32
+            sprites.as_ptr() as _,
+            sprites.len() as _
         )
     }
 
@@ -117,11 +117,11 @@ impl PlaydateSprite {
         ptr: *mut playdate_sys::SpriteQueryInfo,
         len: i32,
     ) -> Vec<SpriteQueryInfo> {
-        let mut vec = Vec::with_capacity(len as usize);
+        let mut vec = Vec::with_capacity(len as _);
 
         unsafe {
             for i in 0..len {
-                let val = ptr.offset(i as isize);
+                let val = ptr.offset(i as _);
                 let val = &(*val);
                 vec.push(SpriteQueryInfo {
                     sprite_ref: SpriteRef(val.sprite),
@@ -139,10 +139,10 @@ impl PlaydateSprite {
     }
 
     fn refs_from_raw_pointers(ptr: *mut *mut LCDSprite, len: i32) -> Vec<SpriteRef> {
-        let mut vec = Vec::with_capacity(len as usize);
+        let mut vec = Vec::with_capacity(len as _);
         unsafe {
             for i in 0..len {
-                let val = (*ptr).offset(i as isize);
+                let val = (*ptr).offset(i as _);
                 let sref = SpriteRef(val);
                 vec.push(sref);
             }
@@ -211,7 +211,7 @@ impl<T> Sprite<T> {
 
     pub fn set_image(&mut self, image: &Bitmap, flip: FlipState) {
         let f = self.sprite_api.setImage;
-        invoke_unsafe!(f, self.ptr, image.as_mut_ptr(), flip as u32)
+        invoke_unsafe!(f, self.ptr, image.as_mut_ptr(), flip as _)
     }
 
     pub fn image(&self) -> BitmapRef {
@@ -240,11 +240,11 @@ impl<T> Sprite<T> {
     }
 
     pub fn set_draw_mode(&mut self, mode: DrawMode) {
-        invoke_unsafe!(self.sprite_api.setDrawMode, self.ptr, mode as u32)
+        invoke_unsafe!(self.sprite_api.setDrawMode, self.ptr, mode as _)
     }
 
     pub fn set_image_flip(&mut self, flip: FlipState) {
-        invoke_unsafe!(self.sprite_api.setImageFlip, self.ptr, flip as u32)
+        invoke_unsafe!(self.sprite_api.setImageFlip, self.ptr, flip as _)
     }
 
     pub fn image_flip(&self) -> FlipState {
@@ -265,7 +265,7 @@ impl<T> Sprite<T> {
             self.sprite_api.setStencilImage,
             self.ptr,
             stencil.as_mut_ptr(),
-            tile as i32
+            tile as _
         )
     }
 
@@ -273,7 +273,7 @@ impl<T> Sprite<T> {
         invoke_unsafe!(
             self.sprite_api.setStencilPattern,
             self.ptr,
-            pattern.as_ptr() as *mut _
+            pattern.as_ptr() as _
         )
     }
 
@@ -290,7 +290,7 @@ impl<T> Sprite<T> {
     }
 
     pub fn set_updates_enabled(&mut self, enabled: UpdatesState) {
-        invoke_unsafe!(self.sprite_api.setUpdatesEnabled, self.ptr, enabled as i32)
+        invoke_unsafe!(self.sprite_api.setUpdatesEnabled, self.ptr, enabled as _)
     }
 
     pub fn updates_enabled(&self) -> UpdatesState {
@@ -303,7 +303,7 @@ impl<T> Sprite<T> {
     }
 
     pub fn set_visible(&mut self, state: VisibleState) {
-        invoke_unsafe!(self.sprite_api.setVisible, self.ptr, state as i32)
+        invoke_unsafe!(self.sprite_api.setVisible, self.ptr, state as _)
     }
 
     pub fn visible(&mut self) -> VisibleState {
@@ -316,7 +316,7 @@ impl<T> Sprite<T> {
     }
 
     pub fn set_opaque(&mut self, state: Opaqueness) {
-        invoke_unsafe!(self.sprite_api.setOpaque, self.ptr, state as i32)
+        invoke_unsafe!(self.sprite_api.setOpaque, self.ptr, state as _)
     }
 
     pub fn mark_dirty(&mut self) {
@@ -327,7 +327,7 @@ impl<T> Sprite<T> {
         invoke_unsafe!(
             self.sprite_api.setIgnoresDrawOffset,
             self.ptr,
-            offset_behavior as i32
+            offset_behavior as _
         )
     }
 
@@ -351,11 +351,7 @@ impl<T> Sprite<T> {
     }
 
     pub fn set_collisions_enabled(&mut self, enabled: CollisionState) {
-        invoke_unsafe!(
-            self.sprite_api.setCollisionsEnabled,
-            self.ptr,
-            enabled as i32
-        )
+        invoke_unsafe!(self.sprite_api.setCollisionsEnabled, self.ptr, enabled as _)
     }
 
     pub fn collisions_enabled(&self) -> CollisionState {
@@ -404,11 +400,11 @@ impl<T> Sprite<T> {
             &mut actual_y,
             &mut len
         );
-        let mut vec = Vec::with_capacity(len as usize);
+        let mut vec = Vec::with_capacity(len as _);
 
         unsafe {
             for i in 0..len {
-                let val = ptr.offset(i as isize);
+                let val = ptr.offset(i as _);
                 let val = &(*val);
 
                 vec.push(SpriteCollisionInfo {
@@ -445,18 +441,18 @@ impl<T> Sprite<T> {
             &mut actual_y,
             &mut len
         );
-        let mut vec = Vec::with_capacity(len as usize);
+        let mut vec = Vec::with_capacity(len as _);
 
         unsafe {
             for i in 0..len {
-                let val = ptr.offset(i as isize);
+                let val = ptr.offset(i as _);
                 let val = &(*val);
 
                 vec.push(SpriteCollisionInfo {
                     sprite: SpriteRef(val.sprite),
                     other: SpriteRef(val.other),
                     response_type: val.responseType.into(),
-                    overlaps: val.overlaps.into(),
+                    overlaps: val.overlaps,
                     ti: val.ti,
                     moved: val.move_.into(),
                     normal: val.normal.into(),
@@ -546,36 +542,11 @@ impl Bitmap {
 
 pub struct BitmapRef(*const LCDBitmap);
 
-pub struct Point {
-    pub x: f32,
-    pub y: f32,
-}
-
-impl From<CollisionPoint> for Point {
-    fn from(value: CollisionPoint) -> Self {
-        Point {
-            x: value.x,
-            y: value.y,
-        }
-    }
-}
-
-pub struct IntPoint {
-    pub x: i32,
-    pub y: i32,
-}
-
-impl From<CollisionVector> for IntPoint {
-    fn from(value: CollisionVector) -> Self {
-        Self {
-            x: value.x,
-            y: value.y,
-        }
-    }
-}
+pub type Point = CollisionPoint;
+pub type IntPoint = CollisionVector;
 
 #[repr(u32)]
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DrawMode {
     Copy = LCDBitmapDrawMode_kDrawModeCopy,
     WhiteTransparent = LCDBitmapDrawMode_kDrawModeWhiteTransparent,
@@ -587,66 +558,50 @@ pub enum DrawMode {
     Inverted = LCDBitmapDrawMode_kDrawModeInverted,
 }
 
-#[repr(i32)]
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TileMode {
     NoTile = 0,
     Tile = 1,
 }
 
-#[repr(i32)]
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum UpdatesState {
     Disabled = 0,
     Enabled = 1,
 }
 
-#[repr(i32)]
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum VisibleState {
     Invisible = 0,
     Visible = 1,
 }
 
-#[repr(i32)]
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Opaqueness {
     Translucent = 0,
     Opaque = 1,
 }
 
-#[repr(i32)]
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DrawTime {
     WhenNeeded = 0,
     Always = 1,
 }
 
-#[repr(i32)]
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OffsetBehavior {
     DrawOffset = 0,
     ScreenCoordinates = 1,
 }
 
-#[repr(i32)]
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CollisionState {
     Disabled = 0,
     Enabled = 1,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SpriteOverlap {
-    TunneledThrough,
-    Overlapping,
-}
-
-impl From<u8> for SpriteOverlap {
-    fn from(value: u8) -> Self {
-        match value {
-            0 => Self::TunneledThrough,
-            1 => Self::Overlapping,
-            _ => unreachable!(),
-        }
-    }
+    TunneledThrough = 0,
+    Overlapping = 1,
 }

@@ -1,60 +1,44 @@
 use playdate_sys::playdate_display;
 
-macro_rules! invoke_unsafe {
-    ( $self:ident, $function:ident ) => {
-        invoke_unsafe!($self, $function,)
-    };
-    ( $self:ident, $function:ident, $( $param:expr ),* $( , )? ) => {
-        unsafe {
-            let callable = $self.display().$function.unwrap();
-            callable($( $param ),*)
-        }
-    };
-}
-
 pub struct Display {
-    ptr: *const playdate_display,
+    disp: &'static playdate_display,
 }
 
 impl Display {
-    pub(crate) fn from_ptr(ptr: *const playdate_display) -> Self {
-        Self { ptr }
+    pub(crate) fn from_ptr(disp: &'static playdate_display) -> Self {
+        Self { disp }
     }
 
     pub fn height(&self) -> u32 {
-        invoke_unsafe!(self, getHeight) as u32
+        invoke_unsafe!(self.disp.getHeight) as _
     }
 
     pub fn width(&self) -> u32 {
-        invoke_unsafe!(self, getWidth) as u32
+        invoke_unsafe!(self.disp.getWidth) as _
     }
 
     pub fn set_inverted(&self, state: InvertedState) {
-        invoke_unsafe!(self, setInverted, state as i32)
+        invoke_unsafe!(self.disp.setInverted, state as _)
     }
 
     pub fn set_mosaic(&self, x: u32, y: u32) {
-        invoke_unsafe!(self, setMosaic, x, y)
+        invoke_unsafe!(self.disp.setMosaic, x, y)
     }
 
     pub fn set_flipped(&self, x: FlipState, y: FlipState) {
-        invoke_unsafe!(self, setFlipped, x as i32, y as i32)
+        invoke_unsafe!(self.disp.setFlipped, x as _, y as _)
     }
 
     pub fn set_refresh_rate(&self, rate: f32) {
-        invoke_unsafe!(self, setRefreshRate, rate)
+        invoke_unsafe!(self.disp.setRefreshRate, rate)
     }
 
     pub fn set_scale(&self, scale: DisplayScale) {
-        invoke_unsafe!(self, setScale, scale as u32)
+        invoke_unsafe!(self.disp.setScale, scale as _)
     }
 
     pub fn set_offset(&self, dx: i32, dy: i32) {
-        invoke_unsafe!(self, setOffset, dx, dy)
-    }
-
-    unsafe fn display(&self) -> &::playdate_sys::playdate_display {
-        self.ptr.as_ref().unwrap()
+        invoke_unsafe!(self.disp.setOffset, dx, dy)
     }
 }
 

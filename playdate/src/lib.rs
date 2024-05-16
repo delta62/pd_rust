@@ -25,6 +25,13 @@ pub enum FrameResult {
     Update,
 }
 
+#[derive(Clone, Eq, PartialEq)]
+pub struct ApiVersion {
+    pub major: u16,
+    pub minor: u16,
+    pub patch: u16,
+}
+
 pub struct Playdate {
     display: Display,
     file: PlaydateFileSystem,
@@ -36,7 +43,7 @@ impl Playdate {
     pub unsafe fn new(ptr: *const PlaydateAPI) -> Self {
         let api = *ptr;
         let sys = System::from_ptr(api.system.as_ref().unwrap());
-        let display = Display::from_ptr(api.display);
+        let display = Display::from_ptr(api.display.as_ref().unwrap());
         let sprite = PlaydateSprite::from_ptr(api.sprite.as_ref().unwrap());
         let file = PlaydateFileSystem::from_ptr(api.file.as_ref().unwrap());
 
@@ -45,6 +52,14 @@ impl Playdate {
             sys,
             display,
             sprite,
+        }
+    }
+
+    pub fn api_version() -> ApiVersion {
+        ApiVersion {
+            major: 2,
+            minor: 4,
+            patch: 2,
         }
     }
 
