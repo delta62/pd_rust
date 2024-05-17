@@ -42,12 +42,9 @@ function build() {
     echo "Compiled ${APP_NAME}.pdx"
 }
 
-function post_build() {
-    if [ "$1" == "--run" ]; then
-        "${PLAYDATE_SDK_PATH}/bin/PlaydateSimulator" "${APP_NAME}.pdx"
-    fi
-}
-
 pre_build
 build
-post_build
+
+if [ "$1" == "--run" ]; then
+    "${PLAYDATE_SDK_PATH}/bin/PlaydateSimulator" "${APP_NAME}.pdx"
+fi
