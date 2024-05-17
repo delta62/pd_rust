@@ -7,7 +7,9 @@ extern crate playdate_alloc;
 mod macros;
 
 mod display;
+mod error;
 mod file;
+mod gfx;
 mod sprite;
 mod string;
 mod system;
@@ -15,6 +17,7 @@ mod system;
 use crate::system::System;
 use display::Display;
 use file::PlaydateFileSystem;
+use gfx::PlaydateGraphics;
 use playdate_sys::PlaydateAPI;
 use sprite::PlaydateSprite;
 pub use sprite::Sprite;
@@ -35,6 +38,7 @@ pub struct ApiVersion {
 pub struct Playdate {
     display: Display,
     file: PlaydateFileSystem,
+    gfx: PlaydateGraphics,
     sprite: PlaydateSprite,
     sys: System,
 }
@@ -46,9 +50,11 @@ impl Playdate {
         let display = Display::from_ptr(api.display.as_ref().unwrap());
         let sprite = PlaydateSprite::from_ptr(api.sprite.as_ref().unwrap());
         let file = PlaydateFileSystem::from_ptr(api.file.as_ref().unwrap());
+        let gfx = PlaydateGraphics::from_ptr(api.graphics.as_ref().unwrap());
 
         Self {
             file,
+            gfx,
             sys,
             display,
             sprite,
@@ -77,5 +83,9 @@ impl Playdate {
 
     pub fn file(&self) -> &PlaydateFileSystem {
         &self.file
+    }
+
+    pub fn graphics(&self) -> &PlaydateGraphics {
+        &self.gfx
     }
 }

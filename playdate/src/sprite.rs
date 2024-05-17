@@ -1,13 +1,16 @@
-use crate::display::FlipState;
+use crate::{
+    display::FlipState,
+    gfx::{Bitmap, BitmapRef, IntRect, Rect},
+};
 use alloc::vec::Vec;
 use playdate_alloc::libc::free;
 use playdate_sys::{
-    playdate_sprite, CollisionPoint, CollisionVector, LCDBitmap,
-    LCDBitmapDrawMode_kDrawModeBlackTransparent, LCDBitmapDrawMode_kDrawModeCopy,
-    LCDBitmapDrawMode_kDrawModeFillBlack, LCDBitmapDrawMode_kDrawModeFillWhite,
-    LCDBitmapDrawMode_kDrawModeInverted, LCDBitmapDrawMode_kDrawModeNXOR,
-    LCDBitmapDrawMode_kDrawModeWhiteTransparent, LCDBitmapDrawMode_kDrawModeXOR, LCDSprite, PDRect,
-    SpriteCollisionResponseType, SpriteCollisionResponseType_kCollisionTypeBounce,
+    playdate_sprite, CollisionPoint, CollisionVector, LCDBitmapDrawMode_kDrawModeBlackTransparent,
+    LCDBitmapDrawMode_kDrawModeCopy, LCDBitmapDrawMode_kDrawModeFillBlack,
+    LCDBitmapDrawMode_kDrawModeFillWhite, LCDBitmapDrawMode_kDrawModeInverted,
+    LCDBitmapDrawMode_kDrawModeNXOR, LCDBitmapDrawMode_kDrawModeWhiteTransparent,
+    LCDBitmapDrawMode_kDrawModeXOR, LCDSprite, PDRect, SpriteCollisionResponseType,
+    SpriteCollisionResponseType_kCollisionTypeBounce,
     SpriteCollisionResponseType_kCollisionTypeFreeze,
     SpriteCollisionResponseType_kCollisionTypeOverlap,
     SpriteCollisionResponseType_kCollisionTypeSlide,
@@ -163,8 +166,6 @@ pub struct SpriteQueryInfo {
 }
 
 pub struct SpriteRef(*const LCDSprite);
-pub type Rect = playdate_sys::PDRect;
-pub type IntRect = playdate_sys::LCDRect;
 
 pub struct Sprite<T> {
     data: Option<T>,
@@ -411,7 +412,7 @@ impl<T> Sprite<T> {
                     sprite: SpriteRef(val.sprite),
                     other: SpriteRef(val.other),
                     response_type: val.responseType.into(),
-                    overlaps: val.overlaps.into(),
+                    overlaps: val.overlaps.try_into().unwrap(),
                     ti: val.ti,
                     moved: val.move_.into(),
                     normal: val.normal.into(),
@@ -452,7 +453,7 @@ impl<T> Sprite<T> {
                     sprite: SpriteRef(val.sprite),
                     other: SpriteRef(val.other),
                     response_type: val.responseType.into(),
-                    overlaps: val.overlaps,
+                    overlaps: val.overlaps.try_into().unwrap(),
                     ti: val.ti,
                     moved: val.move_.into(),
                     normal: val.normal.into(),
@@ -532,16 +533,6 @@ impl<T> Drop for Sprite<T> {
     }
 }
 
-pub struct Bitmap(*mut LCDBitmap);
-
-impl Bitmap {
-    pub(crate) fn as_mut_ptr(&self) -> *mut LCDBitmap {
-        self.0
-    }
-}
-
-pub struct BitmapRef(*const LCDBitmap);
-
 pub type Point = CollisionPoint;
 pub type IntPoint = CollisionVector;
 
@@ -604,4 +595,16 @@ pub enum CollisionState {
 pub enum SpriteOverlap {
     TunneledThrough = 0,
     Overlapping = 1,
+}
+
+impl TryFrom<u8> for SpriteOverlap {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        Ok(match value {
+            0 => Self::TunneledThrough,
+            1 => Self::Overlapping,
+            _ => Err(())?,
+        })
+    }
 }

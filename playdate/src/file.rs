@@ -1,3 +1,4 @@
+use crate::error::{Error, Result};
 use alloc::{boxed::Box, ffi::CString, vec::Vec};
 use bitflags::bitflags;
 use core::{
@@ -14,12 +15,6 @@ const FS_FAILURE: i32 = -1;
 pub struct PlaydateFileSystem {
     api: &'static playdate_file,
 }
-
-pub struct FileError {
-    pub message: CString,
-}
-
-type Result<T> = core::result::Result<T, FileError>;
 
 unsafe extern "C" fn list_file_callback<F>(filename: *const c_char, user_data: *mut c_void)
 where
@@ -101,7 +96,7 @@ impl PlaydateFileSystem {
         let ptr = invoke_unsafe!(self.api.geterr);
         let message = unsafe { CStr::from_ptr(ptr) };
         let message = CString::new(message.to_bytes()).unwrap();
-        Err(FileError { message })
+        Err(Error { message })
     }
 }
 
@@ -153,7 +148,7 @@ impl File {
         let ptr = invoke_unsafe!(self.file_api.geterr);
         let message = unsafe { CStr::from_ptr(ptr) };
         let message = CString::new(message.to_bytes()).unwrap();
-        Err(FileError { message })
+        Err(Error { message })
     }
 }
 

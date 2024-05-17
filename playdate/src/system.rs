@@ -6,8 +6,9 @@ use core::{
 };
 use playdate_sys::{
     LCDBitmap, PDButtons_kButtonA, PDButtons_kButtonB, PDButtons_kButtonDown,
-    PDButtons_kButtonLeft, PDButtons_kButtonRight, PDButtons_kButtonUp, PDMenuItem,
-    PDPeripherals_kAccelerometer,
+    PDButtons_kButtonLeft, PDButtons_kButtonRight, PDButtons_kButtonUp,
+    PDLanguage_kPDLanguageEnglish, PDLanguage_kPDLanguageJapanese, PDLanguage_kPDLanguageUnknown,
+    PDMenuItem, PDPeripherals_kAccelerometer,
 };
 
 pub struct System {
@@ -248,17 +249,22 @@ impl System {
     }
 
     pub fn set_auto_lock_enabled(&self, state: AutoLockState) {
-        invoke_unsafe!(self.sys_api.setAutoLockDisabled, state.into())
+        invoke_unsafe!(self.sys_api.setAutoLockDisabled, state as _)
     }
 
     pub fn set_crank_sounds_enabled(&self, state: CrankSoundState) -> CrankSoundState {
-        let previous_value = invoke_unsafe!(self.sys_api.setCrankSoundsDisabled, state.into());
+        let previous_value = invoke_unsafe!(self.sys_api.setCrankSoundsDisabled, state as _);
 
         return if previous_value == 0 {
             CrankSoundState::Enabled
         } else {
             CrankSoundState::Disabled
         };
+    }
+
+    pub fn language(&self) -> Language {
+        let lang = invoke_unsafe!(self.sys_api.getLanguage);
+        lang.try_into().unwrap()
     }
 }
 
@@ -420,44 +426,49 @@ pub struct Buttons {
     pub released: ButtonState,
 }
 
+#[derive(Debug)]
 pub struct AccelerometerState {
     pub x: f32,
     pub y: f32,
     pub z: f32,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Debug, Eq)]
 pub enum CrankState {
     Docked,
     Undocked,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Debug, Eq)]
 pub enum AutoLockState {
-    Enabled,
-    Disabled,
+    Enabled = 0,
+    Disabled = 1,
 }
 
-impl Into<i32> for AutoLockState {
-    fn into(self) -> i32 {
-        match self {
-            Self::Enabled => 0,
-            Self::Disabled => 1,
-        }
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Debug, Eq)]
 pub enum CrankSoundState {
-    Enabled,
-    Disabled,
+    Enabled = 0,
+    Disabled = 1,
 }
 
-impl Into<i32> for CrankSoundState {
-    fn into(self) -> i32 {
-        match self {
-            Self::Enabled => 0,
-            Self::Disabled => 1,
-        }
+#[repr(u32)]
+#[derive(Clone, Copy, PartialEq, Debug, Eq)]
+pub enum Language {
+    English = PDLanguage_kPDLanguageEnglish,
+    Japanese = PDLanguage_kPDLanguageJapanese,
+    Unknown = PDLanguage_kPDLanguageUnknown,
+}
+
+impl TryFrom<u32> for Language {
+    type Error = ();
+
+    #[allow(non_upper_case_globals)]
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        Ok(match value {
+            PDLanguage_kPDLanguageEnglish => Self::English,
+            PDLanguage_kPDLanguageJapanese => Self::Japanese,
+            PDLanguage_kPDLanguageUnknown => Self::Unknown,
+            _ => Err(())?,
+        })
     }
 }
