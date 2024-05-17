@@ -74,7 +74,7 @@ impl PlaydateGraphics {
     }
 
     pub fn load_bitmap(&self, path: &CStr) -> Result<Bitmap> {
-        let mut err = null_mut();
+        let err = null_mut();
         let bmp = invoke_unsafe!(self.api.loadBitmap, path.as_ptr(), err);
 
         if bmp.is_null() {
@@ -355,7 +355,7 @@ pub struct Bitmap {
 
 impl Bitmap {
     pub fn load(&mut self, path: &CStr) -> Result<()> {
-        let mut err = null_mut();
+        let err = null_mut();
         invoke_unsafe!(self.gfx.loadIntoBitmap, path.as_ptr(), self.ptr, err);
 
         if err.is_null() {

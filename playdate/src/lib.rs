@@ -20,6 +20,8 @@ use file::PlaydateFileSystem;
 use gfx::PlaydateGraphics;
 use playdate_sys::PlaydateAPI;
 use sprite::PlaydateSprite;
+
+pub use gfx::Color;
 pub use sprite::Sprite;
 
 #[repr(i32)]
