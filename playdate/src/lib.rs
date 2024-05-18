@@ -9,20 +9,27 @@ mod macros;
 mod display;
 mod error;
 mod file;
+mod font;
 mod gfx;
+pub mod libc;
 mod sprite;
 mod string;
 mod system;
 
-use crate::system::System;
 use display::Display;
 use file::PlaydateFileSystem;
-use gfx::PlaydateGraphics;
 use playdate_sys::PlaydateAPI;
-use sprite::PlaydateSprite;
 
-pub use gfx::Color;
-pub use sprite::Sprite;
+pub use font::*;
+pub use gfx::*;
+pub use sprite::*;
+pub use system::*;
+
+pub const VERSION: ApiVersion = ApiVersion {
+    major: 2,
+    minor: 4,
+    patch: 2,
+};
 
 #[repr(i32)]
 pub enum FrameResult {
@@ -41,6 +48,7 @@ pub struct Playdate {
     display: Display,
     file: PlaydateFileSystem,
     gfx: PlaydateGraphics,
+    ptr: *const PlaydateAPI,
     sprite: PlaydateSprite,
     sys: System,
 }
@@ -55,19 +63,12 @@ impl Playdate {
         let gfx = PlaydateGraphics::from_ptr(api.graphics.as_ref().unwrap());
 
         Self {
+            display,
             file,
             gfx,
-            sys,
-            display,
+            ptr,
             sprite,
-        }
-    }
-
-    pub fn api_version() -> ApiVersion {
-        ApiVersion {
-            major: 2,
-            minor: 4,
-            patch: 2,
+            sys,
         }
     }
 
@@ -89,5 +90,9 @@ impl Playdate {
 
     pub fn graphics(&self) -> &PlaydateGraphics {
         &self.gfx
+    }
+
+    pub fn as_ptr(&self) -> *const PlaydateAPI {
+        self.ptr
     }
 }

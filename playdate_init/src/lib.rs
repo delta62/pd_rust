@@ -8,11 +8,6 @@ pub fn pd_init(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let ident = &f.sig.ident;
 
     let c_init = quote! {
-        #[cfg(not(test))]
-        #[panic_handler]
-        fn panic(_info: &::core::panic::PanicInfo) -> ! {
-            loop {}
-        }
 
         #[no_mangle]
         extern "C" fn eventHandler(

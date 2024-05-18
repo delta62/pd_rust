@@ -1,6 +1,7 @@
 use crate::{
     display::FlipState,
     error::{Error, Result},
+    font::{Font, TextEncoding},
     sprite::{DrawMode, TileMode},
 };
 use alloc::borrow::ToOwned;
@@ -8,12 +9,11 @@ use core::{ffi::CStr, ptr::null_mut};
 use playdate_alloc::libc;
 use playdate_sys::{
     playdate_graphics, LCDBitmap, LCDBitmapFlip_kBitmapFlippedX, LCDBitmapFlip_kBitmapFlippedXY,
-    LCDBitmapFlip_kBitmapFlippedY, LCDBitmapFlip_kBitmapUnflipped, LCDBitmapTable, LCDFont,
+    LCDBitmapFlip_kBitmapFlippedY, LCDBitmapFlip_kBitmapUnflipped, LCDBitmapTable,
     LCDLineCapStyle_kLineCapStyleButt, LCDLineCapStyle_kLineCapStyleRound,
     LCDLineCapStyle_kLineCapStyleSquare, LCDPolygonFillRule_kPolygonFillEvenOdd,
     LCDPolygonFillRule_kPolygonFillNonZero, LCDSolidColor_kColorBlack, LCDSolidColor_kColorClear,
-    LCDSolidColor_kColorWhite, LCDSolidColor_kColorXOR, PDStringEncoding_k16BitLEEncoding,
-    PDStringEncoding_kASCIIEncoding, PDStringEncoding_kUTF8Encoding,
+    LCDSolidColor_kColorWhite, LCDSolidColor_kColorXOR,
 };
 
 pub struct PlaydateGraphics {
@@ -25,20 +25,32 @@ impl PlaydateGraphics {
         Self { api }
     }
 
-    pub fn push_context(&mut self, target: &mut Bitmap) {
-        todo!()
-    }
-
-    pub fn pop_context(&mut self) {
+    pub fn with_context<F>(&mut self, target: Option<&mut Bitmap>, mut f: F)
+    where
+        F: FnMut(),
+    {
+        let target = target.map(|bmp| bmp.ptr).unwrap_or_else(|| null_mut());
+        invoke_unsafe!(self.api.pushContext, target);
+        f();
         invoke_unsafe!(self.api.popContext)
     }
 
-    pub fn set_stencil(&mut self, stencil: Option<&mut Bitmap>) {
-        todo!()
+    pub fn with_stencil<F>(&self, stencil: &mut Bitmap, mut f: F)
+    where
+        F: FnMut(),
+    {
+        invoke_unsafe!(self.api.setStencil, stencil.ptr);
+        f();
+        invoke_unsafe!(self.api.setStencil, null_mut())
     }
 
-    pub fn set_stencil_image(&mut self, stencil: Option<&mut Bitmap>, tile_mode: TileMode) {
-        todo!()
+    pub fn with_stencil_image<F>(&self, stencil: &mut Bitmap, tile_mode: TileMode, mut f: F)
+    where
+        F: FnMut(),
+    {
+        invoke_unsafe!(self.api.setStencilImage, stencil.ptr, tile_mode as _);
+        f();
+        invoke_unsafe!(self.api.setStencil, null_mut())
     }
 
     pub fn set_draw_mode(&mut self, draw_mode: DrawMode) {
@@ -62,7 +74,7 @@ impl PlaydateGraphics {
     }
 
     pub fn set_font(&mut self, font: &mut Font) {
-        todo!()
+        invoke_unsafe!(self.api.setFont, font.as_mut_ptr())
     }
 
     pub fn set_text_tracking(&mut self, tracking: i32) {
@@ -83,15 +95,12 @@ impl PlaydateGraphics {
             Err(Error { message })?;
         }
 
-        Ok(Bitmap {
-            gfx: self.api,
-            ptr: bmp,
-        })
+        Ok(Bitmap::new(self.api, bmp))
     }
 
     pub fn new_bitmap(&self, width: i32, height: i32, bg_color: Color) -> Bitmap {
         let ptr = invoke_unsafe!(self.api.newBitmap, width, height, bg_color as _);
-        Bitmap { ptr, gfx: self.api }
+        Bitmap::new(self.api, ptr)
     }
 
     pub fn tile_bitmap(
@@ -131,7 +140,7 @@ impl PlaydateGraphics {
             &mut allocated_size
         );
 
-        Bitmap { ptr, gfx: self.api }
+        Bitmap::new(self.api, ptr)
     }
 
     pub fn load_bitmap_table(&self, path: &CStr) -> Result<BitmapTable> {
@@ -182,10 +191,8 @@ impl PlaydateGraphics {
             Err(Error { message })?
         }
 
-        Ok(Font { ptr, api: self.api })
+        Ok(Font::new(self.api, ptr))
     }
-
-    // TODO makeFontFromData
 
     pub fn draw_ellipse(
         &self,
@@ -286,7 +293,7 @@ impl PlaydateGraphics {
         }
 
         let ptr = invoke_unsafe!(self.api.getDebugBitmap);
-        Some(Bitmap { ptr, gfx: self.api })
+        Some(Bitmap::new(self.api, ptr))
     }
 
     pub fn display_frame(&self) -> *mut u8 {
@@ -304,7 +311,7 @@ impl PlaydateGraphics {
 
     pub fn copy_frame_buffer_bitmap(&self) -> Bitmap {
         let ptr = invoke_unsafe!(self.api.copyFrameBufferBitmap);
-        Bitmap { ptr, gfx: self.api }
+        Bitmap::new(self.api, ptr)
     }
 
     pub fn mark_updated_rows(&mut self, start: i32, end: i32) {
@@ -314,51 +321,23 @@ impl PlaydateGraphics {
     pub fn set_draw_offset(&mut self, dx: i32, dy: i32) {
         invoke_unsafe!(self.api.setDrawOffset, dx, dy)
     }
-
-    // TODO setSpriteDrawFunction, setColorToPattern
-}
-
-pub struct Font {
-    api: &'static playdate_graphics,
-    ptr: *mut LCDFont,
-}
-
-impl Font {
-    pub fn height(&self) -> u8 {
-        invoke_unsafe!(self.api.getFontHeight, self.ptr)
-    }
-
-    // TODO getFontPage, getPageGlyph, getGlyphKerning
-
-    pub fn text_width(
-        &self,
-        text: &CStr,
-        len: usize,
-        encoding: TextEncoding,
-        tracking: i32,
-    ) -> i32 {
-        invoke_unsafe!(
-            self.api.getTextWidth,
-            self.ptr,
-            text.as_ptr() as _,
-            len,
-            encoding as _,
-            tracking
-        )
-    }
 }
 
 pub struct Bitmap {
-    gfx: &'static playdate_graphics,
+    api: &'static playdate_graphics,
     ptr: *mut LCDBitmap,
 }
 
 impl Bitmap {
+    pub(crate) fn new(api: &'static playdate_graphics, ptr: *mut LCDBitmap) -> Self {
+        Self { api, ptr }
+    }
+
     pub fn load(&mut self, path: &CStr) -> Result<()> {
         let err = null_mut();
-        invoke_unsafe!(self.gfx.loadIntoBitmap, path.as_ptr(), self.ptr, err);
+        invoke_unsafe!(self.api.loadIntoBitmap, path.as_ptr(), self.ptr, err);
 
-        if err.is_null() {
+        if !err.is_null() {
             let message = unsafe {
                 let cstr = CStr::from_ptr(*err);
                 let msg = cstr.to_owned();
@@ -373,11 +352,11 @@ impl Bitmap {
     }
 
     pub fn set_mask(&mut self, mask: BitmapRef) {
-        invoke_unsafe!(self.gfx.setBitmapMask, self.ptr, mask.0 as _);
+        invoke_unsafe!(self.api.setBitmapMask, self.ptr, mask.0 as _);
     }
 
     pub fn mask(&self) -> Option<BitmapRef> {
-        let ptr = invoke_unsafe!(self.gfx.getBitmapMask, self.ptr);
+        let ptr = invoke_unsafe!(self.api.getBitmapMask, self.ptr);
         if ptr.is_null() {
             None
         } else {
@@ -386,7 +365,7 @@ impl Bitmap {
     }
 
     pub fn clear(&mut self, color: Color) {
-        invoke_unsafe!(self.gfx.clearBitmap, self.ptr, color as _)
+        invoke_unsafe!(self.api.clearBitmap, self.ptr, color as _)
     }
 
     pub fn check_mask_collision(
@@ -401,7 +380,7 @@ impl Bitmap {
         rect: IntRect,
     ) -> bool {
         let result = invoke_unsafe!(
-            self.gfx.checkMaskCollision,
+            self.api.checkMaskCollision,
             self.ptr,
             x,
             y,
@@ -416,11 +395,11 @@ impl Bitmap {
     }
 
     pub fn draw(&self, x: i32, y: i32, flip: BitmapFlip) {
-        invoke_unsafe!(self.gfx.drawBitmap, self.ptr, x, y, flip as _)
+        invoke_unsafe!(self.api.drawBitmap, self.ptr, x, y, flip as _)
     }
 
     pub fn draw_scaled(&self, x: i32, y: i32, x_scale: f32, y_scale: f32) {
-        invoke_unsafe!(self.gfx.drawScaledBitmap, self.ptr, x, y, x_scale, y_scale)
+        invoke_unsafe!(self.api.drawScaledBitmap, self.ptr, x, y, x_scale, y_scale)
     }
 
     pub fn draw_rotated(
@@ -434,7 +413,7 @@ impl Bitmap {
         y_scale: f32,
     ) {
         invoke_unsafe!(
-            self.gfx.drawRotatedBitmap,
+            self.api.drawRotatedBitmap,
             self.ptr,
             x,
             y,
@@ -446,13 +425,43 @@ impl Bitmap {
         )
     }
 
-    pub fn data(&self) {
-        todo!()
+    pub fn data(&self) -> BitmapData {
+        let mut width = 0;
+        let mut height = 0;
+        let mut row_bytes = 0;
+        let mut mask = null_mut();
+        let mut data = null_mut();
+
+        invoke_unsafe!(
+            self.api.getBitmapData,
+            self.ptr,
+            &mut width,
+            &mut height,
+            &mut row_bytes,
+            &mut mask,
+            &mut data
+        );
+
+        BitmapData {
+            width,
+            height,
+            row_bytes,
+            mask,
+            data,
+        }
     }
 
     pub(crate) fn as_mut_ptr(&self) -> *mut LCDBitmap {
         self.ptr
     }
+}
+
+pub struct BitmapData {
+    pub width: i32,
+    pub height: i32,
+    pub row_bytes: i32,
+    pub mask: *mut u8,
+    pub data: *mut u8,
 }
 
 pub struct BitmapTable {
@@ -495,9 +504,9 @@ impl Drop for BitmapTable {
 
 impl Clone for Bitmap {
     fn clone(&self) -> Self {
-        let clone = invoke_unsafe!(self.gfx.copyBitmap, self.ptr);
+        let clone = invoke_unsafe!(self.api.copyBitmap, self.ptr);
         Self {
-            gfx: self.gfx,
+            api: self.api,
             ptr: clone,
         }
     }
@@ -505,7 +514,7 @@ impl Clone for Bitmap {
 
 impl Drop for Bitmap {
     fn drop(&mut self) {
-        invoke_unsafe!(self.gfx.freeBitmap, self.ptr)
+        invoke_unsafe!(self.api.freeBitmap, self.ptr)
     }
 }
 
@@ -539,14 +548,6 @@ pub enum Color {
 
 pub type Rect = playdate_sys::PDRect;
 pub type IntRect = playdate_sys::LCDRect;
-
-#[repr(u32)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum TextEncoding {
-    Ascii = PDStringEncoding_kASCIIEncoding,
-    Utf8 = PDStringEncoding_kUTF8Encoding,
-    Le16Bit = PDStringEncoding_k16BitLEEncoding,
-}
 
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

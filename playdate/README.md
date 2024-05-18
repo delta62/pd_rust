@@ -23,3 +23,9 @@ is done for you via the `pd_init` macro.
   data with menu items, pass values into the
   provided menu item closure.
 - `playdate->system->removeAllMenuItems()` not implemented
+- `playdate->gfx->pushContext()` and `playdate->gfx->popContext()` refactored to
+  use a callback, and named `with_context()`
+- `formatString` and `vaFormatString` are implemented as `format_string!()`
+- `parseString` not implemented
+- `makeFontFromData` not implemented
+- `setColorToPattern` not implemented
