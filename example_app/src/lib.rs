@@ -4,32 +4,59 @@
 
 extern crate alloc;
 
-use playdate::{cstr, format_string, Color, FrameResult, Playdate};
-use playdate_init::{pd_init, pd_update};
+use playdate::{cstr, FrameResult, Playdate};
+use playdate_init::pd_app;
 
-#[cfg(not(test))]
-#[no_mangle]
-#[lang = "eh_personality"]
-fn rust_eh_personality() {}
+const SCREEN_WIDTH: i32 = 400;
+const SCREEN_HEIGHT: i32 = 240;
 
-#[cfg(not(test))]
-#[panic_handler]
-fn panic_handler(_info: &::core::panic::PanicInfo) -> ! {
-    ::core::intrinsics::abort()
+const TEXT_WIDTH: i32 = 86;
+const TEXT_HEIGHT: i32 = 16;
+
+#[pd_app(init = "new", update = "update")]
+struct Game {
+    pd: Playdate,
+    dx: i32,
+    dy: i32,
+    x: i32,
+    y: i32,
 }
 
-#[pd_init]
-fn init(pd: &mut Playdate) {
-    let s = format_string!(pd, cstr!("[%d] hello %s").as_ptr(), 42, cstr!("world"));
-    pd.system().log_to_console(&s);
-}
+impl Game {
+    fn new(pd: Playdate) -> Self {
+        pd.system().log_to_console(cstr!("hello world"));
+        let dx = 1;
+        let dy = 2;
 
-#[pd_update]
-fn update(pd: &mut Playdate) -> FrameResult {
-    pd.system().draw_fps(0, 0);
+        let x = (SCREEN_WIDTH - TEXT_WIDTH) / 2;
+        let y = (SCREEN_HEIGHT - TEXT_HEIGHT) / 2;
 
-    pd.graphics()
-        .fill_triangle(100, 200, 200, 50, 300, 200, Color::Black);
+        Self { pd, dx, dy, x, y }
+    }
 
-    FrameResult::Update
+    fn update(&mut self) -> FrameResult {
+        self.pd.graphics().clear(playdate::Color::White);
+
+        self.pd.sprite().draw_sprites();
+        self.pd.system().draw_fps(0, 0);
+        self.pd.graphics().draw_text(
+            cstr!("hello world!"),
+            playdate::TextEncoding::Ascii,
+            self.x,
+            self.y,
+        );
+
+        self.x += self.dx;
+        self.y += self.dy;
+
+        if self.x < 0 || self.x > SCREEN_WIDTH - TEXT_WIDTH {
+            self.dx = -self.dx;
+        }
+
+        if self.y < 0 || self.y > SCREEN_HEIGHT - TEXT_HEIGHT {
+            self.dy = -self.dy;
+        }
+
+        FrameResult::Update
+    }
 }

@@ -16,10 +16,10 @@ mod sprite;
 mod string;
 mod system;
 
-use display::Display;
 use file::PlaydateFileSystem;
 use playdate_sys::PlaydateAPI;
 
+pub use display::*;
 pub use font::*;
 pub use gfx::*;
 pub use sprite::*;
@@ -80,16 +80,16 @@ impl Playdate {
         &self.display
     }
 
-    pub fn sprite(&self) -> &PlaydateSprite {
-        &self.sprite
+    pub fn sprite(&mut self) -> &mut PlaydateSprite {
+        &mut self.sprite
     }
 
     pub fn file(&self) -> &PlaydateFileSystem {
         &self.file
     }
 
-    pub fn graphics(&self) -> &PlaydateGraphics {
-        &self.gfx
+    pub fn graphics(&mut self) -> &mut PlaydateGraphics {
+        &mut self.gfx
     }
 
     pub fn as_ptr(&self) -> *const PlaydateAPI {

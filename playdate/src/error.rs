@@ -1,5 +1,6 @@
 use alloc::ffi::CString;
 
+#[derive(Debug)]
 pub struct Error {
     pub message: CString,
 }

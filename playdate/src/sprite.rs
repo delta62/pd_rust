@@ -2,7 +2,7 @@ use crate::{
     display::FlipState,
     gfx::{Bitmap, BitmapRef, IntRect, Rect},
 };
-use alloc::vec::Vec;
+use alloc::{rc::Rc, vec::Vec};
 use playdate_alloc::libc::free;
 use playdate_sys::{
     playdate_sprite, CollisionPoint, CollisionVector, LCDBitmapDrawMode_kDrawModeBlackTransparent,
@@ -17,82 +17,93 @@ use playdate_sys::{
 };
 
 pub struct PlaydateSprite {
-    sprite_api: &'static playdate_sprite,
+    api: &'static playdate_sprite,
 }
 
 impl PlaydateSprite {
-    pub(crate) fn from_ptr(sprite_api: &'static playdate_sprite) -> Self {
-        Self { sprite_api }
+    pub(crate) fn from_ptr(api: &'static playdate_sprite) -> Self {
+        Self { api }
+    }
+
+    pub fn new<T>(&self, data: Option<T>) -> Sprite<T> {
+        let ptr = invoke_unsafe!(self.api.newSprite);
+        let image = None;
+        Sprite {
+            image,
+            data,
+            ptr,
+            api: self.api,
+        }
     }
 
     pub fn set_clip_rects_in_range(&mut self, rect: IntRect, start_z: i32, end_z: i32) {
-        invoke_unsafe!(self.sprite_api.setClipRectsInRange, rect, start_z, end_z)
+        invoke_unsafe!(self.api.setClipRectsInRange, rect, start_z, end_z)
     }
 
     pub fn clear_clip_rects_in_range(&mut self, start_z: i32, end_z: i32) {
-        invoke_unsafe!(self.sprite_api.clearClipRectsInRange, start_z, end_z)
+        invoke_unsafe!(self.api.clearClipRectsInRange, start_z, end_z)
     }
 
     pub fn set_always_redraw(&mut self, state: DrawTime) {
-        invoke_unsafe!(self.sprite_api.setAlwaysRedraw, state as _)
+        invoke_unsafe!(self.api.setAlwaysRedraw, state as _)
     }
 
     pub fn add_dirty_rect(&mut self, rect: IntRect) {
-        invoke_unsafe!(self.sprite_api.addDirtyRect, rect)
+        invoke_unsafe!(self.api.addDirtyRect, rect)
     }
 
-    pub fn add_sprite<T>(&mut self, sprite: &Sprite<T>) {
-        invoke_unsafe!(self.sprite_api.addSprite, sprite.ptr)
+    pub fn add_sprite<T>(&mut self, sprite: Rc<Sprite<T>>) {
+        invoke_unsafe!(self.api.addSprite, sprite.ptr)
     }
 
     pub fn remove_sprite(&mut self, sprite: SpriteRef) {
-        invoke_unsafe!(self.sprite_api.removeSprite, sprite.0 as _)
+        invoke_unsafe!(self.api.removeSprite, sprite.0 as _)
     }
 
     pub fn remove_sprites(&mut self, sprites: &[SpriteRef]) {
         invoke_unsafe!(
-            self.sprite_api.removeSprites,
+            self.api.removeSprites,
             sprites.as_ptr() as _,
             sprites.len() as _
         )
     }
 
     pub fn remove_all_sprites(&mut self) {
-        invoke_unsafe!(self.sprite_api.removeAllSprites)
+        invoke_unsafe!(self.api.removeAllSprites)
     }
 
     pub fn sprite_count(&self) -> i32 {
-        invoke_unsafe!(self.sprite_api.getSpriteCount)
+        invoke_unsafe!(self.api.getSpriteCount)
     }
 
     pub fn draw_sprites(&self) {
-        invoke_unsafe!(self.sprite_api.drawSprites)
+        invoke_unsafe!(self.api.drawSprites)
     }
 
     pub fn update_and_draw_sprites(&self) {
-        invoke_unsafe!(self.sprite_api.updateAndDrawSprites)
+        invoke_unsafe!(self.api.updateAndDrawSprites)
     }
 
     pub fn reset_collision_world(&mut self) {
-        invoke_unsafe!(self.sprite_api.resetCollisionWorld)
+        invoke_unsafe!(self.api.resetCollisionWorld)
     }
 
     pub fn query_sprites_at_point(&self, x: f32, y: f32) -> Vec<SpriteRef> {
         let mut len = 0;
-        let ptr = invoke_unsafe!(self.sprite_api.querySpritesAtPoint, x, y, &mut len);
+        let ptr = invoke_unsafe!(self.api.querySpritesAtPoint, x, y, &mut len);
         Self::refs_from_raw_pointers(ptr, len)
     }
 
     pub fn query_sprites_in_rect(&self, x: f32, y: f32, width: f32, height: f32) -> Vec<SpriteRef> {
         let mut len = 0;
-        let f = self.sprite_api.querySpritesInRect;
+        let f = self.api.querySpritesInRect;
         let ptr = invoke_unsafe!(f, x, y, width, height, &mut len);
         Self::refs_from_raw_pointers(ptr, len)
     }
 
     pub fn query_sprites_along_line(&self, x1: f32, y1: f32, x2: f32, y2: f32) -> Vec<SpriteRef> {
         let mut len = 0;
-        let f = self.sprite_api.querySpritesAlongLine;
+        let f = self.api.querySpritesAlongLine;
         let ptr = invoke_unsafe!(f, x1, y1, x2, y2, &mut len);
         Self::refs_from_raw_pointers(ptr, len)
     }
@@ -105,14 +116,14 @@ impl PlaydateSprite {
         y2: f32,
     ) -> Vec<SpriteQueryInfo> {
         let mut len = 0;
-        let f = self.sprite_api.querySpriteInfoAlongLine;
+        let f = self.api.querySpriteInfoAlongLine;
         let ptr = invoke_unsafe!(f, x1, y1, x2, y2, &mut len);
         Self::info_from_raw_pointers(ptr, len)
     }
 
     pub fn all_overlapping_sprites(&self) -> Vec<SpriteRef> {
         let mut len = 0;
-        let ptr = invoke_unsafe!(self.sprite_api.allOverlappingSprites, &mut len);
+        let ptr = invoke_unsafe!(self.api.allOverlappingSprites, &mut len);
         PlaydateSprite::refs_from_raw_pointers(ptr, len)
     }
 
@@ -168,32 +179,33 @@ pub struct SpriteQueryInfo {
 pub struct SpriteRef(*const LCDSprite);
 
 pub struct Sprite<T> {
+    image: Option<Rc<Bitmap>>,
     data: Option<T>,
     ptr: *mut LCDSprite,
-    sprite_api: &'static playdate_sprite,
+    api: &'static playdate_sprite,
 }
 
 impl<T> Sprite<T> {
     pub fn set_bounds(&mut self, bounds: Rect) {
-        invoke_unsafe!(self.sprite_api.setBounds, self.ptr, bounds)
+        invoke_unsafe!(self.api.setBounds, self.ptr, bounds)
     }
 
     pub fn bounds(&self) -> Rect {
-        invoke_unsafe!(self.sprite_api.getBounds, self.ptr)
+        invoke_unsafe!(self.api.getBounds, self.ptr)
     }
 
     pub fn move_to(&self, x: f32, y: f32) {
-        invoke_unsafe!(self.sprite_api.moveTo, self.ptr, x, y)
+        invoke_unsafe!(self.api.moveTo, self.ptr, x, y)
     }
 
     pub fn move_by(&self, x: f32, y: f32) {
-        invoke_unsafe!(self.sprite_api.moveBy, self.ptr, x, y)
+        invoke_unsafe!(self.api.moveBy, self.ptr, x, y)
     }
 
     pub fn position(&self) -> Point {
         let mut x = 0.0;
         let mut y = 0.0;
-        invoke_unsafe!(self.sprite_api.getPosition, self.ptr, &mut x, &mut y);
+        invoke_unsafe!(self.api.getPosition, self.ptr, &mut x, &mut y);
 
         Point { x, y }
     }
@@ -201,55 +213,56 @@ impl<T> Sprite<T> {
     pub fn center(&self) -> Point {
         let mut x = 0.0;
         let mut y = 0.0;
-        invoke_unsafe!(self.sprite_api.getCenter, self.ptr, &mut x, &mut y);
+        invoke_unsafe!(self.api.getCenter, self.ptr, &mut x, &mut y);
 
         Point { x, y }
     }
 
     pub fn set_center(&self, x: f32, y: f32) {
-        invoke_unsafe!(self.sprite_api.setCenter, self.ptr, x, y)
+        invoke_unsafe!(self.api.setCenter, self.ptr, x, y)
     }
 
-    pub fn set_image(&mut self, image: &Bitmap, flip: FlipState) {
-        let f = self.sprite_api.setImage;
-        invoke_unsafe!(f, self.ptr, image.as_mut_ptr(), flip as _)
+    pub fn set_image(&mut self, image: Rc<Bitmap>, flip: FlipState) {
+        let f = self.api.setImage;
+        invoke_unsafe!(f, self.ptr, image.as_mut_ptr(), flip as _);
+        self.image = Some(image);
     }
 
     pub fn image(&self) -> BitmapRef {
-        let ptr = invoke_unsafe!(self.sprite_api.getImage, self.ptr);
+        let ptr = invoke_unsafe!(self.api.getImage, self.ptr);
         BitmapRef(ptr)
     }
 
     pub fn set_size(&mut self, width: f32, height: f32) {
-        invoke_unsafe!(self.sprite_api.setSize, self.ptr, width, height)
+        invoke_unsafe!(self.api.setSize, self.ptr, width, height)
     }
 
     pub fn set_z_index(&mut self, z_index: i16) {
-        invoke_unsafe!(self.sprite_api.setZIndex, self.ptr, z_index)
+        invoke_unsafe!(self.api.setZIndex, self.ptr, z_index)
     }
 
     pub fn z_index(&self) -> i16 {
-        invoke_unsafe!(self.sprite_api.getZIndex, self.ptr)
+        invoke_unsafe!(self.api.getZIndex, self.ptr)
     }
 
     pub fn set_tag(&self, tag: u8) {
-        invoke_unsafe!(self.sprite_api.setTag, self.ptr, tag)
+        invoke_unsafe!(self.api.setTag, self.ptr, tag)
     }
 
     pub fn tag(&self) -> u8 {
-        invoke_unsafe!(self.sprite_api.getTag, self.ptr)
+        invoke_unsafe!(self.api.getTag, self.ptr)
     }
 
     pub fn set_draw_mode(&mut self, mode: DrawMode) {
-        invoke_unsafe!(self.sprite_api.setDrawMode, self.ptr, mode as _)
+        invoke_unsafe!(self.api.setDrawMode, self.ptr, mode as _)
     }
 
     pub fn set_image_flip(&mut self, flip: FlipState) {
-        invoke_unsafe!(self.sprite_api.setImageFlip, self.ptr, flip as _)
+        invoke_unsafe!(self.api.setImageFlip, self.ptr, flip as _)
     }
 
     pub fn image_flip(&self) -> FlipState {
-        let value = invoke_unsafe!(self.sprite_api.getImageFlip, self.ptr);
+        let value = invoke_unsafe!(self.api.getImageFlip, self.ptr);
         if value == 0 {
             FlipState::Normal
         } else {
@@ -258,12 +271,12 @@ impl<T> Sprite<T> {
     }
 
     pub fn set_stencil(&mut self, stencil: &Bitmap) {
-        invoke_unsafe!(self.sprite_api.setStencil, self.ptr, stencil.as_mut_ptr())
+        invoke_unsafe!(self.api.setStencil, self.ptr, stencil.as_mut_ptr())
     }
 
     pub fn set_stencil_image(&mut self, stencil: &Bitmap, tile: TileMode) {
         invoke_unsafe!(
-            self.sprite_api.setStencilImage,
+            self.api.setStencilImage,
             self.ptr,
             stencil.as_mut_ptr(),
             tile as _
@@ -271,31 +284,27 @@ impl<T> Sprite<T> {
     }
 
     pub fn set_stencil_pattern(&mut self, pattern: [u8; 8]) {
-        invoke_unsafe!(
-            self.sprite_api.setStencilPattern,
-            self.ptr,
-            pattern.as_ptr() as _
-        )
+        invoke_unsafe!(self.api.setStencilPattern, self.ptr, pattern.as_ptr() as _)
     }
 
     pub fn clear_stencil(&mut self) {
-        invoke_unsafe!(self.sprite_api.clearStencil, self.ptr)
+        invoke_unsafe!(self.api.clearStencil, self.ptr)
     }
 
     pub fn set_clip_rect(&mut self, clip_rect: IntRect) {
-        invoke_unsafe!(self.sprite_api.setClipRect, self.ptr, clip_rect)
+        invoke_unsafe!(self.api.setClipRect, self.ptr, clip_rect)
     }
 
     pub fn clear_clip_rect(&mut self) {
-        invoke_unsafe!(self.sprite_api.clearClipRect, self.ptr)
+        invoke_unsafe!(self.api.clearClipRect, self.ptr)
     }
 
     pub fn set_updates_enabled(&mut self, enabled: UpdatesState) {
-        invoke_unsafe!(self.sprite_api.setUpdatesEnabled, self.ptr, enabled as _)
+        invoke_unsafe!(self.api.setUpdatesEnabled, self.ptr, enabled as _)
     }
 
     pub fn updates_enabled(&self) -> UpdatesState {
-        let enabled = invoke_unsafe!(self.sprite_api.updatesEnabled, self.ptr);
+        let enabled = invoke_unsafe!(self.api.updatesEnabled, self.ptr);
         if enabled == 1 {
             UpdatesState::Enabled
         } else {
@@ -304,11 +313,11 @@ impl<T> Sprite<T> {
     }
 
     pub fn set_visible(&mut self, state: VisibleState) {
-        invoke_unsafe!(self.sprite_api.setVisible, self.ptr, state as _)
+        invoke_unsafe!(self.api.setVisible, self.ptr, state as _)
     }
 
     pub fn visible(&mut self) -> VisibleState {
-        let visible = invoke_unsafe!(self.sprite_api.isVisible, self.ptr);
+        let visible = invoke_unsafe!(self.api.isVisible, self.ptr);
         if visible == 1 {
             VisibleState::Visible
         } else {
@@ -317,30 +326,30 @@ impl<T> Sprite<T> {
     }
 
     pub fn set_opaque(&mut self, state: Opaqueness) {
-        invoke_unsafe!(self.sprite_api.setOpaque, self.ptr, state as _)
+        invoke_unsafe!(self.api.setOpaque, self.ptr, state as _)
     }
 
     pub fn mark_dirty(&mut self) {
-        invoke_unsafe!(self.sprite_api.markDirty, self.ptr)
+        invoke_unsafe!(self.api.markDirty, self.ptr)
     }
 
     pub fn set_ignores_draw_offset(&mut self, offset_behavior: OffsetBehavior) {
         invoke_unsafe!(
-            self.sprite_api.setIgnoresDrawOffset,
+            self.api.setIgnoresDrawOffset,
             self.ptr,
             offset_behavior as _
         )
     }
 
     pub fn set_update_fn(&mut self, update_fn: extern "C" fn(*mut LCDSprite)) {
-        invoke_unsafe!(self.sprite_api.setUpdateFunction, self.ptr, Some(update_fn))
+        invoke_unsafe!(self.api.setUpdateFunction, self.ptr, Some(update_fn))
     }
 
     pub fn set_draw_fn(
         &mut self,
         draw_fn: extern "C" fn(*mut LCDSprite, bounds: PDRect, drawrect: PDRect),
     ) {
-        invoke_unsafe!(self.sprite_api.setDrawFunction, self.ptr, Some(draw_fn))
+        invoke_unsafe!(self.api.setDrawFunction, self.ptr, Some(draw_fn))
     }
 
     pub fn set_user_data(&mut self, data: Option<T>) {
@@ -352,11 +361,11 @@ impl<T> Sprite<T> {
     }
 
     pub fn set_collisions_enabled(&mut self, enabled: CollisionState) {
-        invoke_unsafe!(self.sprite_api.setCollisionsEnabled, self.ptr, enabled as _)
+        invoke_unsafe!(self.api.setCollisionsEnabled, self.ptr, enabled as _)
     }
 
     pub fn collisions_enabled(&self) -> CollisionState {
-        let enabled = invoke_unsafe!(self.sprite_api.collisionsEnabled, self.ptr);
+        let enabled = invoke_unsafe!(self.api.collisionsEnabled, self.ptr);
         if enabled == 1 {
             CollisionState::Enabled
         } else {
@@ -365,33 +374,29 @@ impl<T> Sprite<T> {
     }
 
     pub fn set_collide_rect(&mut self, rect: Rect) {
-        invoke_unsafe!(self.sprite_api.setCollideRect, self.ptr, rect)
+        invoke_unsafe!(self.api.setCollideRect, self.ptr, rect)
     }
 
     pub fn collide_rect(&self) -> Rect {
-        invoke_unsafe!(self.sprite_api.getCollideRect, self.ptr)
+        invoke_unsafe!(self.api.getCollideRect, self.ptr)
     }
 
     pub fn clear_collide_rect(&self) {
-        invoke_unsafe!(self.sprite_api.clearCollideRect, self.ptr)
+        invoke_unsafe!(self.api.clearCollideRect, self.ptr)
     }
 
     pub fn set_collision_response_fn(
         &mut self,
         func: extern "C" fn(*mut LCDSprite, *mut LCDSprite) -> u32,
     ) {
-        invoke_unsafe!(
-            self.sprite_api.setCollisionResponseFunction,
-            self.ptr,
-            Some(func)
-        )
+        invoke_unsafe!(self.api.setCollisionResponseFunction, self.ptr, Some(func))
     }
 
     pub fn check_collisions(&self, goal_x: f32, goal_y: f32) -> Vec<SpriteCollisionInfo> {
         let mut len = 0;
         let mut actual_x = 0.0;
         let mut actual_y = 0.0;
-        let f = self.sprite_api.checkCollisions;
+        let f = self.api.checkCollisions;
         let ptr = invoke_unsafe!(
             f,
             self.ptr,
@@ -432,7 +437,7 @@ impl<T> Sprite<T> {
         let mut len = 0;
         let mut actual_x = 0.0;
         let mut actual_y = 0.0;
-        let f = self.sprite_api.moveWithCollisions;
+        let f = self.api.moveWithCollisions;
         let ptr = invoke_unsafe!(
             f,
             self.ptr,
@@ -471,7 +476,7 @@ impl<T> Sprite<T> {
 
     pub fn overlapping_sprites(&self) -> Vec<SpriteRef> {
         let mut len = 0;
-        let ptr = invoke_unsafe!(self.sprite_api.overlappingSprites, self.ptr, &mut len);
+        let ptr = invoke_unsafe!(self.api.overlappingSprites, self.ptr, &mut len);
         PlaydateSprite::refs_from_raw_pointers(ptr, len)
     }
 }
@@ -494,11 +499,13 @@ where
     T: Clone,
 {
     fn clone(&self) -> Self {
-        let sprite_api = self.sprite_api;
-        let ptr = invoke_unsafe!(self.sprite_api.copy, self.ptr);
+        let api = self.api;
+        let ptr = invoke_unsafe!(self.api.copy, self.ptr);
         let data = self.data.clone();
+        let image = self.image.clone();
         Self {
-            sprite_api,
+            image,
+            api,
             ptr,
             data,
         }
@@ -529,7 +536,7 @@ impl From<SpriteCollisionResponseType> for CollisionResponse {
 
 impl<T> Drop for Sprite<T> {
     fn drop(&mut self) {
-        invoke_unsafe!(self.sprite_api.freeSprite, self.ptr)
+        invoke_unsafe!(self.api.freeSprite, self.ptr)
     }
 }
 

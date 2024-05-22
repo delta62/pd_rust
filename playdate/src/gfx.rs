@@ -5,7 +5,10 @@ use crate::{
     sprite::{DrawMode, TileMode},
 };
 use alloc::borrow::ToOwned;
-use core::{ffi::CStr, ptr::null_mut};
+use core::{
+    ffi::CStr,
+    ptr::{null, null_mut},
+};
 use playdate_alloc::libc;
 use playdate_sys::{
     playdate_graphics, LCDBitmap, LCDBitmapFlip_kBitmapFlippedX, LCDBitmapFlip_kBitmapFlippedXY,
@@ -86,11 +89,11 @@ impl PlaydateGraphics {
     }
 
     pub fn load_bitmap(&self, path: &CStr) -> Result<Bitmap> {
-        let err = null_mut();
-        let bmp = invoke_unsafe!(self.api.loadBitmap, path.as_ptr(), err);
+        let mut err = null();
+        let bmp = invoke_unsafe!(self.api.loadBitmap, path.as_ptr(), &mut err);
 
         if bmp.is_null() {
-            let cstr = unsafe { CStr::from_ptr(*err) };
+            let cstr = unsafe { CStr::from_ptr(err) };
             let message = cstr.to_owned();
             Err(Error { message })?;
         }
