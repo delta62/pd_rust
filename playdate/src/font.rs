@@ -1,48 +1,45 @@
-use crate::gfx::Bitmap;
+use crate::{
+    bitmap::Bitmap,
+    error::{Error, Result},
+    libc,
+};
+use alloc::borrow::ToOwned;
 use core::{
     ffi::CStr,
-    mem::forget,
-    ptr::{addr_of_mut, null_mut},
+    marker::PhantomData,
+    ptr::{null, null_mut},
 };
-use playdate_alloc::libc;
 use playdate_sys::{
-    playdate_graphics, LCDBitmap, LCDFont, LCDFontGlyph, LCDFontPage,
-    PDStringEncoding_k16BitLEEncoding, PDStringEncoding_kASCIIEncoding,
-    PDStringEncoding_kUTF8Encoding,
+    LCDBitmap, LCDFont, LCDFontGlyph, LCDFontPage, PDStringEncoding_k16BitLEEncoding,
+    PDStringEncoding_kASCIIEncoding, PDStringEncoding_kUTF8Encoding,
 };
 
-pub struct FontPage {
-    api: &'static playdate_graphics,
-    ptr: *mut LCDFontPage,
-}
-
-impl FontPage {
-    pub fn glyph(&self, c: u32) -> Glyph {
-        let mut advance = 0;
-        let bitmap = null_mut();
-        let ptr = invoke_unsafe!(self.api.getPageGlyph, self.ptr, c, bitmap, &mut advance);
-
-        Glyph::new(self.api, ptr, advance, bitmap)
-    }
-}
-
-pub struct Font {
-    api: &'static playdate_graphics,
-    ptr: *mut LCDFont,
-}
+pub struct Font(*mut LCDFont);
 
 impl Font {
-    pub(crate) fn new(api: &'static playdate_graphics, ptr: *mut LCDFont) -> Self {
-        Self { api, ptr }
+    pub fn new(path: &CStr) -> Result<Self> {
+        let mut err = null();
+        let ptr = invoke_unsafe!(graphics.loadFont, path.as_ptr(), &mut err);
+
+        if ptr.is_null() {
+            let message = unsafe { CStr::from_ptr(err) }.to_owned();
+            unsafe { libc::free(err as _) };
+            Err(Error { message })?;
+        }
+
+        Ok(Self(ptr))
     }
 
     pub fn height(&self) -> u8 {
-        invoke_unsafe!(self.api.getFontHeight, self.ptr)
+        invoke_unsafe!(graphics.getFontHeight, self.0)
     }
 
-    pub fn font_page(&self, c: u32) -> FontPage {
-        let ptr = invoke_unsafe!(self.api.getFontPage, self.ptr, c);
-        FontPage { ptr, api: self.api }
+    pub fn font_page<'a>(&'a self, c: u32) -> FontPage<'a> {
+        let ptr = invoke_unsafe!(graphics.getFontPage, self.0, c);
+        FontPage {
+            lifetime: Default::default(),
+            ptr,
+        }
     }
 
     pub fn text_width(
@@ -53,8 +50,8 @@ impl Font {
         tracking: i32,
     ) -> i32 {
         invoke_unsafe!(
-            self.api.getTextWidth,
-            self.ptr,
+            graphics.getTextWidth,
+            self.0,
             text.as_ptr() as _,
             len,
             encoding as _,
@@ -62,14 +59,14 @@ impl Font {
         )
     }
 
-    pub(crate) fn as_mut_ptr(&mut self) -> *mut LCDFont {
-        self.ptr
+    pub(crate) fn as_mut_ptr(&self) -> *mut LCDFont {
+        self.0
     }
 }
 
 impl Drop for Font {
     fn drop(&mut self) {
-        unsafe { libc::free(self.ptr as _) };
+        unsafe { libc::free(self.0 as _) };
     }
 }
 
@@ -81,26 +78,43 @@ pub enum TextEncoding {
     Le16Bit = PDStringEncoding_k16BitLEEncoding,
 }
 
-pub struct Glyph {
-    api: &'static playdate_graphics,
-    ptr: *mut LCDFontGlyph,
-    advance: i32,
-    bitmap: *mut Bitmap,
+pub struct FontPage<'a> {
+    lifetime: PhantomData<&'a ()>,
+    ptr: *mut LCDFontPage,
 }
 
-impl Glyph {
-    fn new(
-        api: &'static playdate_graphics,
-        ptr: *mut LCDFontGlyph,
-        advance: i32,
-        bitmap: *mut *mut LCDBitmap,
-    ) -> Self {
-        let mut bmp = Bitmap::new(api, unsafe { *bitmap });
-        let bitmap = addr_of_mut!(bmp);
-        forget(bmp);
+impl<'a> FontPage<'a> {
+    pub fn glyph(&'a self, c: u32) -> Glyph<'a> {
+        let mut advance = 0;
+        let mut bitmap = null_mut();
+        let ptr = invoke_unsafe!(
+            graphics.getPageGlyph,
+            self.ptr,
+            c,
+            &mut bitmap,
+            &mut advance
+        );
+
+        Glyph::new(ptr, advance, bitmap)
+    }
+}
+
+pub struct Glyph<'a> {
+    lifetime: PhantomData<&'a ()>,
+    ptr: *mut LCDFontGlyph,
+    advance: i32,
+    bitmap: Bitmap,
+}
+
+impl<'a> Glyph<'a> {
+    fn new(ptr: *mut LCDFontGlyph, advance: i32, bitmap: *mut LCDBitmap) -> Self {
+        let bitmap = Bitmap {
+            ptr: bitmap,
+            mask: None,
+        };
 
         Self {
-            api,
+            lifetime: Default::default(),
             ptr,
             advance,
             bitmap,
@@ -112,10 +126,10 @@ impl Glyph {
     }
 
     pub fn kerning(&self, c1: u32, c2: u32) -> i32 {
-        invoke_unsafe!(self.api.getGlyphKerning, self.ptr, c1, c2)
+        invoke_unsafe!(graphics.getGlyphKerning, self.ptr, c1, c2)
     }
 
     pub fn bitmap(&self) -> &Bitmap {
-        unsafe { self.bitmap.as_ref().unwrap() }
+        &self.bitmap
     }
 }

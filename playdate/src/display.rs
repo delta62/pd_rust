@@ -1,55 +1,11 @@
-use playdate_sys::playdate_display;
-
-pub struct Display {
-    disp: &'static playdate_display,
-}
-
-impl Display {
-    pub(crate) fn from_ptr(disp: &'static playdate_display) -> Self {
-        Self { disp }
-    }
-
-    pub fn height(&self) -> u32 {
-        invoke_unsafe!(self.disp.getHeight) as _
-    }
-
-    pub fn width(&self) -> u32 {
-        invoke_unsafe!(self.disp.getWidth) as _
-    }
-
-    pub fn set_inverted(&self, state: InvertedState) {
-        invoke_unsafe!(self.disp.setInverted, state as _)
-    }
-
-    pub fn set_mosaic(&self, x: u32, y: u32) {
-        invoke_unsafe!(self.disp.setMosaic, x, y)
-    }
-
-    pub fn set_flipped(&self, x: FlipState, y: FlipState) {
-        invoke_unsafe!(self.disp.setFlipped, x as _, y as _)
-    }
-
-    pub fn set_refresh_rate(&self, rate: f32) {
-        invoke_unsafe!(self.disp.setRefreshRate, rate)
-    }
-
-    pub fn set_scale(&self, scale: DisplayScale) {
-        invoke_unsafe!(self.disp.setScale, scale as _)
-    }
-
-    pub fn set_offset(&self, dx: i32, dy: i32) {
-        invoke_unsafe!(self.disp.setOffset, dx, dy)
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum InvertedState {
+pub enum ScreenInversion {
     Normal = 0,
     Inverted = 1,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum FlipState {
+pub enum ScreenFlip {
     Normal = 0,
     Flipped = 1,
 }
@@ -60,4 +16,47 @@ pub enum DisplayScale {
     Two = 2,
     Four = 4,
     Eight = 8,
+}
+
+pub struct Display {
+    _unused: [u8; 0],
+}
+
+impl Display {
+    pub(crate) fn new() -> Self {
+        let _unused = Default::default();
+        Self { _unused }
+    }
+
+    pub fn height(&self) -> i32 {
+        invoke_unsafe!(display.getHeight)
+    }
+
+    pub fn width(&self) -> i32 {
+        invoke_unsafe!(display.getWidth)
+    }
+
+    pub fn set_inverted(&mut self, state: ScreenInversion) {
+        invoke_unsafe!(display.setInverted, state as _)
+    }
+
+    pub fn set_mosaic(&mut self, x: u32, y: u32) {
+        invoke_unsafe!(display.setMosaic, x, y)
+    }
+
+    pub fn set_flipped(&mut self, x: ScreenFlip, y: ScreenFlip) {
+        invoke_unsafe!(display.setFlipped, x as _, y as _)
+    }
+
+    pub fn set_refresh_rate(&mut self, rate: f32) {
+        invoke_unsafe!(display.setRefreshRate, rate)
+    }
+
+    pub fn set_scale(&mut self, scale: DisplayScale) {
+        invoke_unsafe!(display.setScale, scale as _)
+    }
+
+    pub fn set_offset(&mut self, dx: i32, dy: i32) {
+        invoke_unsafe!(display.setOffset, dx, dy)
+    }
 }

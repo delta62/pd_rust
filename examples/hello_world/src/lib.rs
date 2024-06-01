@@ -35,11 +35,11 @@ impl Game {
     }
 
     fn update(&mut self) -> FrameResult {
-        self.pd.graphics().clear(playdate::Color::White);
+        self.pd.graphics_mut().clear(playdate::Color::White);
 
-        self.pd.sprite().draw_sprites();
-        self.pd.system().draw_fps(0, 0);
-        self.pd.graphics().draw_text(
+        self.pd.sprite_mut().draw_sprites();
+        self.pd.system_mut().draw_fps(0, 0);
+        self.pd.graphics_mut().draw_text(
             cstr!("hello world!"),
             playdate::TextEncoding::Ascii,
             self.x,

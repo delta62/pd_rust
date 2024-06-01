@@ -1,29 +1,39 @@
 #![no_std]
 
 extern crate alloc;
-extern crate playdate_alloc;
+use libc_alloc::LibcAlloc;
 
 #[macro_use]
 mod macros;
 
+mod bitmap;
 mod display;
 mod error;
 mod file;
 mod font;
 mod gfx;
-pub mod libc;
+pub mod rng;
 mod sprite;
 mod string;
 mod system;
 
-use file::PlaydateFileSystem;
 use playdate_sys::PlaydateAPI;
 
+pub use bitmap::*;
 pub use display::*;
+pub use file::*;
 pub use font::*;
 pub use gfx::*;
+pub use playdate_sys::libc;
 pub use sprite::*;
 pub use system::*;
+
+#[global_allocator]
+static ALLOCATOR: LibcAlloc = LibcAlloc;
+
+extern "C" {
+    static PD: *mut PlaydateAPI;
+}
 
 pub const VERSION: ApiVersion = ApiVersion {
     major: 2,
@@ -37,7 +47,7 @@ pub enum FrameResult {
     Update,
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ApiVersion {
     pub major: u16,
     pub minor: u16,
@@ -46,53 +56,62 @@ pub struct ApiVersion {
 
 pub struct Playdate {
     display: Display,
-    file: PlaydateFileSystem,
-    gfx: PlaydateGraphics,
-    ptr: *const PlaydateAPI,
-    sprite: PlaydateSprite,
-    sys: System,
+    file: FileSystem,
+    graphics: Graphics,
+    sprite: SpriteAPI,
+    system: System,
 }
 
 impl Playdate {
-    pub unsafe fn new(ptr: *const PlaydateAPI) -> Self {
-        let api = *ptr;
-        let sys = System::from_ptr(api.system.as_ref().unwrap());
-        let display = Display::from_ptr(api.display.as_ref().unwrap());
-        let sprite = PlaydateSprite::from_ptr(api.sprite.as_ref().unwrap());
-        let file = PlaydateFileSystem::from_ptr(api.file.as_ref().unwrap());
-        let gfx = PlaydateGraphics::from_ptr(api.graphics.as_ref().unwrap());
+    pub unsafe fn new(_ptr: *mut PlaydateAPI) -> Self {
+        let system = System::new();
+        let display = Display::new();
+        let sprite = SpriteAPI::new();
+        let file = FileSystem::new();
+        let graphics = Graphics::new();
 
         Self {
             display,
             file,
-            gfx,
-            ptr,
+            graphics,
             sprite,
-            sys,
+            system,
         }
     }
 
     pub fn system(&self) -> &System {
-        &self.sys
+        &self.system
+    }
+
+    pub fn system_mut(&mut self) -> &mut System {
+        &mut self.system
     }
 
     pub fn display(&self) -> &Display {
         &self.display
     }
 
-    pub fn sprite(&mut self) -> &mut PlaydateSprite {
+    pub fn display_mut(&mut self) -> &mut Display {
+        &mut self.display
+    }
+
+    pub fn sprite(&self) -> &SpriteAPI {
+        &self.sprite
+    }
+
+    pub fn sprite_mut(&mut self) -> &mut SpriteAPI {
         &mut self.sprite
     }
 
-    pub fn file(&self) -> &PlaydateFileSystem {
-        &self.file
+    pub fn file_system(&mut self) -> &FileSystem {
+        &mut self.file
     }
 
-    pub fn graphics(&mut self) -> &mut PlaydateGraphics {
-        &mut self.gfx
+    pub fn graphics(&self) -> &Graphics {
+        &self.graphics
     }
 
-    pub fn as_ptr(&self) -> *const PlaydateAPI {
-        self.ptr
+    pub fn graphics_mut(&mut self) -> &mut Graphics {
+        &mut self.graphics
     }
 }

@@ -1,4 +1,4 @@
-/target
-/example_app.pdx
+target/
+*.pdx/
 pdex.so
 Source/

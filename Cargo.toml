@@ -1,12 +1,6 @@
 [workspace]
 resolver = "2"
-members = [
-  "example_app",
-  "playdate",
-  "playdate_alloc",
-  "playdate_init",
-  "playdate_sys",
-]
+members = ["playdate", "playdate_init", "playdate_sys"]
 
 [profile.dev]
 panic = "abort"
