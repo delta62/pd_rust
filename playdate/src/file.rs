@@ -37,7 +37,7 @@ impl FileSystem {
         );
 
         // listing files is done, free the given closure now
-        unsafe { Box::from_raw(data) };
+        drop(unsafe { Box::from_raw(data) });
         self.fs_result_from_int(result)
     }
 

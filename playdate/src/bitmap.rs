@@ -274,6 +274,7 @@ pub enum BitmapFlip {
 impl TryFrom<u32> for BitmapFlip {
     type Error = ();
 
+    #[allow(non_upper_case_globals)]
     fn try_from(value: u32) -> core::result::Result<Self, Self::Error> {
         match value {
             LCDBitmapFlip_kBitmapFlippedX => Ok(Self::FlippedX),

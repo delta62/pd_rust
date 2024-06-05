@@ -15,7 +15,6 @@ const TEXT_HEIGHT: i32 = 16;
 
 #[pd_app(init = "new", update = "update")]
 struct Game {
-    pd: Playdate,
     dx: i32,
     dy: i32,
     x: i32,
@@ -23,7 +22,7 @@ struct Game {
 }
 
 impl Game {
-    fn new(pd: Playdate) -> Self {
+    fn new(pd: &mut Playdate) -> Self {
         pd.system().log_to_console(cstr!("hello world"));
         let dx = 1;
         let dy = 2;
@@ -31,15 +30,15 @@ impl Game {
         let x = (SCREEN_WIDTH - TEXT_WIDTH) / 2;
         let y = (SCREEN_HEIGHT - TEXT_HEIGHT) / 2;
 
-        Self { pd, dx, dy, x, y }
+        Self { dx, dy, x, y }
     }
 
-    fn update(&mut self) -> FrameResult {
-        self.pd.graphics_mut().clear(playdate::Color::White);
+    fn update(&mut self, pd: &mut Playdate) -> FrameResult {
+        pd.graphics_mut().clear(playdate::Color::White);
 
-        self.pd.sprite_mut().draw_sprites();
-        self.pd.system_mut().draw_fps(0, 0);
-        self.pd.graphics_mut().draw_text(
+        pd.sprite_mut().draw_sprites();
+        pd.system_mut().draw_fps(0, 0);
+        pd.graphics_mut().draw_text(
             cstr!("hello world!"),
             playdate::TextEncoding::Ascii,
             self.x,

@@ -1,4 +1,5 @@
 #![no_std]
+#![feature(trait_upcasting)]
 
 extern crate alloc;
 use libc_alloc::LibcAlloc;
@@ -32,7 +33,7 @@ pub use system::*;
 static ALLOCATOR: LibcAlloc = LibcAlloc;
 
 extern "C" {
-    static PD: *mut PlaydateAPI;
+    pub static PD: *mut PlaydateAPI;
 }
 
 pub const VERSION: ApiVersion = ApiVersion {

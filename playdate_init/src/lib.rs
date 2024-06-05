@@ -47,8 +47,13 @@ fn init(args: &MacroArgs) -> proc_macro2::TokenStream {
         ..
     } = args;
     quote! {
+        struct PlaydateAppUserData {
+            api: *mut ::playdate_sys::PlaydateAPI,
+            app: #struct_ident,
+        }
+
         #[no_mangle]
-        unsafe extern "C" fn eventHandler(
+        extern "C" fn eventHandler(
             api: *mut ::playdate_sys::PlaydateAPI,
             event: ::playdate_sys::PDSystemEvent,
             arg: u32,
@@ -59,15 +64,16 @@ fn init(args: &MacroArgs) -> proc_macro2::TokenStream {
                 return 0
             }
 
-            let mut pd = ::playdate::Playdate::new(api);
-            let app = #struct_ident::#init_ident(pd);
-            let app = Box::new(app);
-            let ptr = Box::into_raw(app) as *mut ::core::ffi::c_void;
+            let mut pd = unsafe { ::playdate::Playdate::new(api) };
+            let app = #struct_ident::#init_ident(&mut pd);
 
-            let api = api.as_ref().unwrap();
-            let sys = api.system.as_ref().unwrap();
+            let app_data = Box::new(PlaydateAppUserData { api, app });
+            let app_data_ptr = Box::into_raw(app_data) as *mut ::core::ffi::c_void;
+
+            let api = unsafe { api.as_ref().unwrap() };
+            let sys = unsafe { api.system.as_ref().unwrap() };
             let set_update = sys.setUpdateCallback.unwrap();
-            set_update(Some(__playdate_sys_update), ptr);
+            unsafe { set_update(Some(__playdate_sys_update), app_data_ptr) };
 
             0
         }
@@ -75,22 +81,17 @@ fn init(args: &MacroArgs) -> proc_macro2::TokenStream {
 }
 
 fn update(args: &MacroArgs) -> proc_macro2::TokenStream {
-    let MacroArgs {
-        struct_ident,
-        update_ident,
-        ..
-    } = args;
+    let MacroArgs { update_ident, .. } = args;
     quote! {
         #[no_mangle]
-        unsafe extern "C" fn __playdate_sys_update(
+        extern "C" fn __playdate_sys_update(
             data: *mut ::core::ffi::c_void
         ) -> i32 {
-            use alloc::boxed::Box;
-
-            let ptr = data as *mut #struct_ident;
-            let mut app = Box::from_raw(ptr);
-            let frame_result = app.#update_ident();
-            ::core::mem::forget(app);
+            let ptr = data as *mut PlaydateAppUserData;
+            let mut app_data = unsafe { ::alloc::boxed::Box::from_raw(ptr) };
+            let mut pd = unsafe { ::playdate::Playdate::new(app_data.api) };
+            let frame_result = app_data.app.#update_ident(&mut pd);
+            ::core::mem::forget(app_data);
             frame_result as i32
         }
     }
