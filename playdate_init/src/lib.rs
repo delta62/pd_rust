@@ -64,6 +64,8 @@ fn init(args: &MacroArgs) -> proc_macro2::TokenStream {
                 return 0
             }
 
+            unsafe { ::playdate::PD = api };
+
             let mut pd = unsafe { ::playdate::Playdate::new(api) };
             let app = #struct_ident::#init_ident(&mut pd);
 
@@ -88,6 +90,10 @@ fn update(args: &MacroArgs) -> proc_macro2::TokenStream {
             data: *mut ::core::ffi::c_void
         ) -> i32 {
             let ptr = data as *mut PlaydateAppUserData;
+
+            // let log = unsafe { ptr.as_ref().unwrap().system.as_ref().unwrap().logToConsole.unwrap() };
+            // unsafe { log(cstr!("update").as_ptr()) };
+
             let mut app_data = unsafe { ::alloc::boxed::Box::from_raw(ptr) };
             let mut pd = unsafe { ::playdate::Playdate::new(app_data.api) };
             let frame_result = app_data.app.#update_ident(&mut pd);

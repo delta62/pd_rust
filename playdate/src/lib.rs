@@ -2,7 +2,6 @@
 #![feature(trait_upcasting)]
 
 extern crate alloc;
-use libc_alloc::LibcAlloc;
 
 #[macro_use]
 mod macros;
@@ -18,6 +17,8 @@ mod sprite;
 mod string;
 mod system;
 
+use core::ptr::null_mut;
+use libc_alloc::LibcAlloc;
 use playdate_sys::PlaydateAPI;
 
 pub use bitmap::*;
@@ -32,9 +33,7 @@ pub use system::*;
 #[global_allocator]
 static ALLOCATOR: LibcAlloc = LibcAlloc;
 
-extern "C" {
-    pub static PD: *mut PlaydateAPI;
-}
+pub static mut PD: *mut PlaydateAPI = null_mut();
 
 pub const VERSION: ApiVersion = ApiVersion {
     major: 2,

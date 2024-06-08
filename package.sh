@@ -4,11 +4,21 @@
 
 set -e
 
-APP_NAME="example_app"
-BUILD_DIR="./target/debug"
+if [ $# -lt 1 ]; then
+    echo >&2 "Usage: $0 <example> [--run]"
+    exit 1
+fi
+
+if [ ! -d "examples/${1}" ]; then
+    echo >&2 "Example '${1}' not found. Pick a name from the examples/ directory."
+    exit 1
+fi
+
+APP_NAME="$1"
+BUILD_DIR="./examples/${APP_NAME}/target/debug"
 BUILT_LIB="${BUILD_DIR}/lib${APP_NAME}.so"
 SOURCE_DIR="Source"
-PLAYDATE_SDK_PATH="/opt/playdate-sdk"
+PLAYDATE_SDK_PATH="${HOME}/.local/share/playdate-sdk"
 CLEAN_FILES=("${SOURCE_DIR}/pdex.so")
 
 function pre_build() {
@@ -28,7 +38,13 @@ function pre_build() {
 }
 
 function build() {
+    # build runtime
     cargo build
+
+    # build app
+    pushd "examples/${APP_NAME}" > /dev/null
+    cargo build
+    popd
 
     echo "Copying .so -> pdex.so"
     cp "${BUILT_LIB}" "${SOURCE_DIR}/pdex.so"
@@ -45,6 +61,6 @@ function build() {
 pre_build
 build
 
-if [ "$1" == "--run" ]; then
+if [ "$1" = "--run" ] || [ "$2" = "--run" ]; then
     "${PLAYDATE_SDK_PATH}/bin/PlaydateSimulator" "${APP_NAME}.pdx"
 fi

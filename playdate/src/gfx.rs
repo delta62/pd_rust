@@ -70,7 +70,7 @@ impl Graphics {
     }
 
     pub fn set_draw_mode(&mut self, draw_mode: DrawMode) {
-        invoke_unsafe!(graphics.setDrawMode, draw_mode as _)
+        invoke_unsafe!(graphics.setDrawMode, draw_mode as _);
     }
 
     pub fn set_clip_rect(&mut self, x: i32, y: i32, width: i32, height: i32) {

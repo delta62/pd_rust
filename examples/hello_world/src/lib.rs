@@ -1,6 +1,5 @@
-#![allow(internal_features)]
-#![feature(core_intrinsics, lang_items)]
 #![no_std]
+#![feature(lang_items, core_intrinsics)]
 
 extern crate alloc;
 

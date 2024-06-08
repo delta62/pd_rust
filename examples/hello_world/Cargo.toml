@@ -12,3 +12,9 @@ crate-type = ["cdylib"]
 playdate = { path = "../../playdate" }
 playdate_init = { path = "../../playdate_init" }
 playdate_sys = { path = "../../playdate_sys" }
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"

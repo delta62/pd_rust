@@ -1,7 +1,7 @@
 macro_rules! invoke_unsafe {
     ( $api:ident . $target:ident $(, $( $param:expr ),+ )? ) => {
         unsafe {
-            let api = (&mut (*crate::PD)).$api.as_ref().unwrap();
+            let api = crate::PD.as_ref().unwrap().$api.as_ref().unwrap();
             let callable = api.$target.unwrap();
             callable($( $( $param ),+ )? )
         }
@@ -11,7 +11,7 @@ macro_rules! invoke_unsafe {
 macro_rules! function_defined {
     ( $api:ident . $target:ident ) => {
         unsafe {
-            let api = (&mut (*crate::PD)).$api.as_ref().unwrap();
+            let api = crate::PD.as_ref().unwrap().$api.as_ref().unwrap();
             api.$target.is_some()
         }
     };
@@ -25,8 +25,7 @@ macro_rules! format_string {
         let mut outstring = ::core::ptr::null_mut();
 
         unsafe {
-            let api = playdate::PD.as_ref().unwrap();
-            let sys = api.system.as_ref().unwrap();
+            let sys = ::playdate::PD.as_ref().unwrap().system.as_ref().unwrap();
             let fmt = sys.formatString.unwrap();
 
             let len = fmt(&mut outstring, $fmt.as_ptr(), $( $( $arg ),+ )? );
