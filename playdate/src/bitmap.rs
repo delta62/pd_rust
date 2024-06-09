@@ -35,7 +35,6 @@ impl Bitmap {
         if ptr.is_null() {
             let cstr = unsafe { CStr::from_ptr(err) };
             let message = cstr.to_owned();
-            unsafe { libc::free(err as _) };
             Err(Error { message })?;
         }
 

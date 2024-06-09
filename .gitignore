@@ -1,4 +1,5 @@
-target/
 *.pdx/
+node_modules/
+target/
+
 pdex.so
-Source/

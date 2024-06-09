@@ -112,8 +112,33 @@ fn panic_handler() -> proc_macro2::TokenStream {
 
         #[cfg(not(test))]
         #[panic_handler]
-        fn panic_handler(_info: &::core::panic::PanicInfo) -> ! {
-            ::core::intrinsics::abort()
+        fn panic_handler(info: &::core::panic::PanicInfo) -> ! {
+            use alloc::{string::String, ffi::CString};
+            use core::panic::Location;
+
+            fn print_stack_frame(location: &Location) {
+                let error = unsafe { ::playdate::PD.as_ref().unwrap().system.as_ref().unwrap().error.unwrap() };
+                let file = CString::new(location.file()).unwrap().into_raw();
+                let line = location.line();
+                let col = location.column();
+                unsafe { error(b"Panic in %s:%u:%u\n\0".as_ptr() as _, file, line, col) }
+            }
+
+            fn busy_loop() -> ! {
+                loop {
+                    unsafe { ::playdate_sys::libc::pause() };
+                }
+            }
+
+            if unsafe { ::playdate::PD.is_null() } {
+                busy_loop()
+            }
+
+            if let Some(location) = info.location() {
+                print_stack_frame(&location);
+            }
+
+            busy_loop()
         }
     }
 }
