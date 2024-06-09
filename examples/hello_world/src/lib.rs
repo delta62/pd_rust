@@ -22,7 +22,7 @@ struct Game {
 }
 
 impl Game {
-    fn new(pd: &mut Playdate) -> Self {
+    fn new(pd: &mut Playdate<()>) -> Self {
         pd.system().log_to_console(cstr!("hello world"));
         let dx = 1;
         let dy = 2;
@@ -33,7 +33,7 @@ impl Game {
         Self { dx, dy, x, y }
     }
 
-    fn update(&mut self, pd: &mut Playdate) -> FrameResult {
+    fn update(&mut self, pd: &mut Playdate<()>) -> FrameResult {
         pd.graphics_mut().clear(playdate::Color::White);
 
         pd.sprite_mut().draw_sprites();

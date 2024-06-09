@@ -1,29 +1,24 @@
 use crate::{explosion::Explosion, state::State};
-use alloc::{boxed::Box, rc::Rc};
-use core::cell::RefCell;
+use alloc::boxed::Box;
 use playdate::{
-    rng, BitmapFlip, GameObject, Persistance, Point, Rect, Sprite, SpriteBuilder, UpdateContext,
+    rng, BitmapFlip, GameObject, Persistance, Playdate, Point, Rect, Sprite, SpriteBuilder,
+    UpdateContext,
 };
 
+#[derive(Default)]
 pub struct EnemyPlane {
-    state: Rc<RefCell<State>>,
     is_hit: bool,
 }
 
 impl EnemyPlane {
-    pub fn new(state: Rc<RefCell<State>>) -> Self {
-        let is_hit = false;
-        Self { state, is_hit }
-    }
-
     pub fn set_hit(&mut self) {
         self.is_hit = true;
     }
 }
 
-impl GameObject for EnemyPlane {
-    fn init(&mut self, builder: SpriteBuilder) -> Sprite {
-        let mut state = self.state.borrow_mut();
+impl GameObject<State> for EnemyPlane {
+    fn init(&mut self, builder: SpriteBuilder<State>, pd: &mut Playdate<State>) -> Sprite<State> {
+        let state = pd.data_mut();
 
         let bitmap_data = state.enemy_plane_image.data();
         let x = ((rng::rand() % 400) - bitmap_data.width / 2) as f32;
@@ -46,22 +41,19 @@ impl GameObject for EnemyPlane {
             .build()
     }
 
-    fn update(&mut self, ctx: UpdateContext) -> Persistance {
-        if self.is_hit {
-            {
-                let mut state = self.state.borrow_mut();
-                state.enemy_count -= 1;
-            }
+    fn update(&mut self, ctx: UpdateContext<State>) -> Persistance {
+        let state = ctx.pd.data_mut();
 
-            let state = self.state.clone();
+        if self.is_hit {
+            state.enemy_count -= 1;
+
             let Point { x, y } = ctx.sprite.position();
             ctx.pd
                 .sprite_mut()
-                .new_sprite(Box::new(Explosion::new(x, y, state)));
+                .new_sprite(Box::new(Explosion::new(x, y)));
             return Persistance::Destroy;
         }
 
-        let mut state = self.state.borrow_mut();
         let position = ctx.sprite.position();
         let new_y = position.y + 4.0;
 

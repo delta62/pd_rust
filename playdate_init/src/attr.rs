@@ -23,6 +23,7 @@ impl Parse for AttrPair {
 pub(crate) struct AppArgs {
     pub init_name: String,
     pub update_name: String,
+    pub state_name: Option<String>,
 }
 
 impl Parse for AppArgs {
@@ -47,10 +48,12 @@ impl Parse for AppArgs {
             .remove("update")
             .expect("argument 'update' is missing")
             .value();
+        let state_name = args.remove("state").map(|s| s.value());
 
         Ok(Self {
             init_name,
             update_name,
+            state_name,
         })
     }
 }

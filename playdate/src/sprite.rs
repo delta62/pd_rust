@@ -7,6 +7,7 @@ use alloc::{boxed::Box, rc::Rc, vec::Vec};
 use core::{
     any::Any,
     ffi::c_void,
+    marker::PhantomData,
     mem::{self, ManuallyDrop},
     ptr::null_mut,
 };
@@ -22,20 +23,23 @@ use playdate_sys::{
     SpriteCollisionResponseType_kCollisionTypeSlide,
 };
 
-pub struct SpriteAPI {
-    sprites: Vec<Sprite>,
+pub struct SpriteAPI<T>
+where
+    T: 'static,
+{
+    sprites: Vec<Sprite<T>>,
 }
 
-impl SpriteAPI {
+impl<T> SpriteAPI<T> {
     pub(crate) fn new() -> Self {
         let sprites = Vec::new();
         Self { sprites }
     }
 
-    pub fn new_sprite(&mut self, mut game_object: Box<dyn GameObject>) {
+    pub fn new_sprite(&mut self, mut game_object: Box<dyn GameObject<T>>) {
         let go_ptr = &mut *game_object as _;
         let builder = SpriteBuilder::new(go_ptr);
-        let sprite = game_object.init(builder);
+        let sprite = game_object.init(builder, &mut unsafe { Playdate::init() });
         self.sprites.push(sprite);
 
         mem::forget(game_object);
@@ -73,7 +77,12 @@ impl SpriteAPI {
         invoke_unsafe!(sprite.resetCollisionWorld)
     }
 
-    pub fn query_at_point<'a>(&self, x: f32, y: f32, sprites: &'a [Sprite]) -> Vec<&'a Sprite> {
+    pub fn query_at_point<'a>(
+        &self,
+        x: f32,
+        y: f32,
+        sprites: &'a [Sprite<T>],
+    ) -> Vec<&'a Sprite<T>> {
         // Do not use querySpritesAtPoint as it uses raw sprite pointers and we can't
         // make any guarantees here as to if they are mutably borrowed elsewhere
         sprites
@@ -87,7 +96,7 @@ impl SpriteAPI {
             .collect()
     }
 
-    pub fn query_in_rect<'a>(&self, rect: Rect, sprites: &'a [Sprite]) -> Vec<&'a Sprite> {
+    pub fn query_in_rect<'a>(&self, rect: Rect, sprites: &'a [Sprite<T>]) -> Vec<&'a Sprite<T>> {
         // Do not use querySpritesInRect as it uses raw sprite pointers and we can't
         // make any guarantees here as to if they are mutably borrowed elsewhere
         sprites
@@ -130,20 +139,23 @@ enum SpriteStencil {
     Pattern([u8; 8]),
 }
 
-struct SpriteData {
+struct SpriteData<T> {
     displayed: bool,
     bitmap: Option<Rc<Bitmap>>,
     stencil: Option<SpriteStencil>,
-    game_object: *mut dyn GameObject,
+    game_object: *mut dyn GameObject<T>,
 }
 
-pub struct Sprite(*mut LCDSprite);
+pub struct Sprite<T> {
+    unused: PhantomData<T>,
+    ptr: *mut LCDSprite,
+}
 
-extern "C" fn update_callback(ptr: *mut LCDSprite) {
-    let mut pd = unsafe { Playdate::new(crate::PD) };
-    let mut sprite = ManuallyDrop::new(Sprite(ptr));
+extern "C" fn update_callback<T: 'static>(ptr: *mut LCDSprite) {
+    let mut pd = unsafe { Playdate::init() };
+    let mut sprite = ManuallyDrop::new(Sprite::from_ptr(ptr));
 
-    let data_ptr = invoke_unsafe!(sprite.getUserdata, ptr) as *mut SpriteData;
+    let data_ptr = invoke_unsafe!(sprite.getUserdata, ptr) as *mut SpriteData<T>;
     let go_ptr = unsafe { &*data_ptr }.game_object;
     let go = unsafe { &mut *go_ptr };
 
@@ -156,16 +168,16 @@ extern "C" fn update_callback(ptr: *mut LCDSprite) {
     go.update(ctx);
 }
 
-extern "C" fn collide_callback(sprite: *mut LCDSprite, other: *mut LCDSprite) -> u32 {
-    let mut pd = unsafe { Playdate::new(crate::PD) };
-    let mut self_sprite = ManuallyDrop::new(Sprite(sprite));
-    let mut other_sprite = ManuallyDrop::new(Sprite(other));
+extern "C" fn collide_callback<T: 'static>(sprite: *mut LCDSprite, other: *mut LCDSprite) -> u32 {
+    let mut pd = unsafe { Playdate::init() };
+    let mut self_sprite = ManuallyDrop::new(Sprite::from_ptr(sprite));
+    let mut other_sprite = ManuallyDrop::new(Sprite::from_ptr(other));
 
-    let data_ptr = invoke_unsafe!(sprite.getUserdata, sprite) as *mut SpriteData;
+    let data_ptr = invoke_unsafe!(sprite.getUserdata, sprite) as *mut SpriteData<T>;
     let go_ptr = unsafe { &*data_ptr }.game_object;
     let go = unsafe { &mut *go_ptr };
 
-    let data_ptr = invoke_unsafe!(sprite.getUserdata, other) as *mut SpriteData;
+    let data_ptr = invoke_unsafe!(sprite.getUserdata, other) as *mut SpriteData<T>;
     let go_ptr = unsafe { &*data_ptr }.game_object;
     let other = unsafe { &mut *go_ptr };
 
@@ -179,11 +191,11 @@ extern "C" fn collide_callback(sprite: *mut LCDSprite, other: *mut LCDSprite) ->
     go.collide(ctx) as u32
 }
 
-extern "C" fn draw_callback(ptr: *mut LCDSprite, bounds: Rect, draw_rect: Rect) {
-    let mut pd = unsafe { Playdate::new(crate::PD) };
-    let sprite = ManuallyDrop::new(Sprite(ptr));
+extern "C" fn draw_callback<T: 'static>(ptr: *mut LCDSprite, bounds: Rect, draw_rect: Rect) {
+    let mut pd = unsafe { Playdate::init() };
+    let sprite = ManuallyDrop::new(Sprite::from_ptr(ptr));
 
-    let data_ptr = invoke_unsafe!(sprite.getUserdata, ptr) as *mut SpriteData;
+    let data_ptr = invoke_unsafe!(sprite.getUserdata, ptr) as *mut SpriteData<T>;
     let go_ptr = unsafe { &*data_ptr }.game_object;
     let go = unsafe { &mut *go_ptr };
 
@@ -198,8 +210,18 @@ extern "C" fn draw_callback(ptr: *mut LCDSprite, bounds: Rect, draw_rect: Rect) 
     go.draw(ctx);
 }
 
-impl Sprite {
-    pub(crate) fn new(game_object: *mut dyn GameObject) -> Self {
+impl<T> Sprite<T>
+where
+    T: 'static,
+{
+    pub(crate) fn from_ptr(ptr: *mut LCDSprite) -> Self {
+        Self {
+            ptr,
+            unused: Default::default(),
+        }
+    }
+
+    pub(crate) fn new(game_object: *mut dyn GameObject<T>) -> Self {
         let ptr = invoke_unsafe!(sprite.newSprite);
 
         let data = Box::new(SpriteData {
@@ -212,24 +234,24 @@ impl Sprite {
         let data_ptr = Box::into_raw(data) as *mut c_void;
         invoke_unsafe!(sprite.setUserdata, ptr, data_ptr);
 
-        invoke_unsafe!(sprite.setUpdateFunction, ptr, Some(update_callback));
-        invoke_unsafe!(sprite.setDrawFunction, ptr, Some(draw_callback));
+        invoke_unsafe!(sprite.setUpdateFunction, ptr, Some(update_callback::<T>));
+        invoke_unsafe!(sprite.setDrawFunction, ptr, Some(draw_callback::<T>));
         invoke_unsafe!(
             sprite.setCollisionResponseFunction,
             ptr,
-            Some(collide_callback)
+            Some(collide_callback::<T>)
         );
 
-        Self(ptr)
+        Self::from_ptr(ptr)
     }
 
-    fn data(&self) -> &SpriteData {
-        let data_ptr = invoke_unsafe!(sprite.getUserdata, self.0) as *mut SpriteData;
+    fn data(&self) -> &SpriteData<T> {
+        let data_ptr = invoke_unsafe!(sprite.getUserdata, self.ptr) as *mut SpriteData<T>;
         unsafe { &*data_ptr }
     }
 
-    fn data_mut(&mut self) -> &mut SpriteData {
-        let data_ptr = invoke_unsafe!(sprite.getUserdata, self.0) as *mut SpriteData;
+    fn data_mut(&mut self) -> &mut SpriteData<T> {
+        let data_ptr = invoke_unsafe!(sprite.getUserdata, self.ptr) as *mut SpriteData<T>;
         unsafe { &mut *data_ptr }
     }
 
@@ -240,7 +262,7 @@ impl Sprite {
         }
 
         data.displayed = true;
-        invoke_unsafe!(sprite.addSprite, self.0)
+        invoke_unsafe!(sprite.addSprite, self.ptr)
     }
 
     pub fn remove(&mut self) {
@@ -250,29 +272,29 @@ impl Sprite {
         }
 
         data.displayed = false;
-        invoke_unsafe!(sprite.removeSprite, self.0);
+        invoke_unsafe!(sprite.removeSprite, self.ptr);
     }
 
     pub fn set_bounds(&mut self, bounds: Rect) {
-        invoke_unsafe!(sprite.setBounds, self.0, bounds)
+        invoke_unsafe!(sprite.setBounds, self.ptr, bounds)
     }
 
     pub fn bounds(&self) -> Rect {
-        invoke_unsafe!(sprite.getBounds, self.0)
+        invoke_unsafe!(sprite.getBounds, self.ptr)
     }
 
     pub fn move_to(&mut self, x: f32, y: f32) {
-        invoke_unsafe!(sprite.moveTo, self.0, x, y)
+        invoke_unsafe!(sprite.moveTo, self.ptr, x, y)
     }
 
     pub fn move_by(&mut self, x: f32, y: f32) {
-        invoke_unsafe!(sprite.moveBy, self.0, x, y)
+        invoke_unsafe!(sprite.moveBy, self.ptr, x, y)
     }
 
     pub fn position(&self) -> Point {
         let mut x = 0.0;
         let mut y = 0.0;
-        invoke_unsafe!(sprite.getPosition, self.0, &mut x, &mut y);
+        invoke_unsafe!(sprite.getPosition, self.ptr, &mut x, &mut y);
 
         Point { x, y }
     }
@@ -280,20 +302,20 @@ impl Sprite {
     pub fn center(&self) -> Point {
         let mut x = 0.0;
         let mut y = 0.0;
-        invoke_unsafe!(sprite.getCenter, self.0, &mut x, &mut y);
+        invoke_unsafe!(sprite.getCenter, self.ptr, &mut x, &mut y);
 
         Point { x, y }
     }
 
     pub fn set_center(&mut self, x: f32, y: f32) {
-        invoke_unsafe!(sprite.setCenter, self.0, x, y)
+        invoke_unsafe!(sprite.setCenter, self.ptr, x, y)
     }
 
     pub fn set_image(&mut self, image: Rc<Bitmap>, flip: BitmapFlip) {
         let data = self.data_mut();
         let bmp = image.as_mut_ptr();
         data.bitmap = Some(image);
-        invoke_unsafe!(sprite.setImage, self.0, bmp, flip as _);
+        invoke_unsafe!(sprite.setImage, self.ptr, bmp, flip as _);
     }
 
     pub fn clear_image(&mut self) {
@@ -303,7 +325,7 @@ impl Sprite {
         }
 
         data.bitmap = None;
-        invoke_unsafe!(sprite.setImage, self.0, null_mut(), Default::default());
+        invoke_unsafe!(sprite.setImage, self.ptr, null_mut(), Default::default());
     }
 
     pub fn image(&self) -> Option<Rc<Bitmap>> {
@@ -312,35 +334,35 @@ impl Sprite {
     }
 
     pub fn set_size(&mut self, width: f32, height: f32) {
-        invoke_unsafe!(sprite.setSize, self.0, width, height)
+        invoke_unsafe!(sprite.setSize, self.ptr, width, height)
     }
 
     pub fn set_z_index(&mut self, z_index: i16) {
-        invoke_unsafe!(sprite.setZIndex, self.0, z_index)
+        invoke_unsafe!(sprite.setZIndex, self.ptr, z_index)
     }
 
     pub fn z_index(&self) -> i16 {
-        invoke_unsafe!(sprite.getZIndex, self.0)
+        invoke_unsafe!(sprite.getZIndex, self.ptr)
     }
 
     pub fn set_tag(&mut self, tag: impl Into<u8>) {
-        invoke_unsafe!(sprite.setTag, self.0, tag.into())
+        invoke_unsafe!(sprite.setTag, self.ptr, tag.into())
     }
 
     pub fn tag<R: From<u8>>(&self) -> R {
-        invoke_unsafe!(sprite.getTag, self.0).into()
+        invoke_unsafe!(sprite.getTag, self.ptr).into()
     }
 
     pub fn set_draw_mode(&mut self, mode: DrawMode) {
-        invoke_unsafe!(sprite.setDrawMode, self.0, mode as _)
+        invoke_unsafe!(sprite.setDrawMode, self.ptr, mode as _)
     }
 
     pub fn set_image_flip(&mut self, flip: BitmapFlip) {
-        invoke_unsafe!(sprite.setImageFlip, self.0, flip as _)
+        invoke_unsafe!(sprite.setImageFlip, self.ptr, flip as _)
     }
 
     pub fn image_flip(&self) -> BitmapFlip {
-        let value = invoke_unsafe!(sprite.getImageFlip, self.0);
+        let value = invoke_unsafe!(sprite.getImageFlip, self.ptr);
         BitmapFlip::try_from(value).unwrap()
     }
 
@@ -348,7 +370,7 @@ impl Sprite {
         let data = self.data_mut();
         let stencil_ptr = stencil.as_mut_ptr();
         data.stencil = Some(SpriteStencil::Bitmap(stencil));
-        invoke_unsafe!(sprite.setStencil, self.0, stencil_ptr)
+        invoke_unsafe!(sprite.setStencil, self.ptr, stencil_ptr)
     }
 
     pub fn set_stencil_image(&mut self, stencil: Rc<Bitmap>, tile: TileMode) {
@@ -361,14 +383,14 @@ impl Sprite {
 
         let stencil_ptr = stencil.as_mut_ptr();
         data.stencil = Some(SpriteStencil::Bitmap(stencil));
-        invoke_unsafe!(sprite.setStencilImage, self.0, stencil_ptr, tile as _)
+        invoke_unsafe!(sprite.setStencilImage, self.ptr, stencil_ptr, tile as _)
     }
 
     pub fn set_stencil_pattern(&mut self, mut pattern: [u8; 8]) {
         let data = self.data_mut();
         let pattern_ptr = pattern.as_mut_ptr();
         data.stencil = Some(SpriteStencil::Pattern(pattern));
-        invoke_unsafe!(sprite.setStencilPattern, self.0, pattern_ptr)
+        invoke_unsafe!(sprite.setStencilPattern, self.ptr, pattern_ptr)
     }
 
     pub fn clear_stencil(&mut self) {
@@ -378,23 +400,23 @@ impl Sprite {
         }
 
         data.stencil = None;
-        invoke_unsafe!(sprite.clearStencil, self.0);
+        invoke_unsafe!(sprite.clearStencil, self.ptr);
     }
 
     pub fn set_clip_rect(&mut self, clip_rect: IntRect) {
-        invoke_unsafe!(sprite.setClipRect, self.0, clip_rect)
+        invoke_unsafe!(sprite.setClipRect, self.ptr, clip_rect)
     }
 
     pub fn clear_clip_rect(&mut self) {
-        invoke_unsafe!(sprite.clearClipRect, self.0)
+        invoke_unsafe!(sprite.clearClipRect, self.ptr)
     }
 
     pub fn set_updates_enabled(&mut self, enabled: UpdatesState) {
-        invoke_unsafe!(sprite.setUpdatesEnabled, self.0, enabled as _)
+        invoke_unsafe!(sprite.setUpdatesEnabled, self.ptr, enabled as _)
     }
 
     pub fn updates_enabled(&self) -> UpdatesState {
-        let enabled = invoke_unsafe!(sprite.updatesEnabled, self.0);
+        let enabled = invoke_unsafe!(sprite.updatesEnabled, self.ptr);
         if enabled == 1 {
             UpdatesState::Enabled
         } else {
@@ -403,11 +425,11 @@ impl Sprite {
     }
 
     pub fn set_visible(&mut self, state: Visibility) {
-        invoke_unsafe!(sprite.setVisible, self.0, state as _)
+        invoke_unsafe!(sprite.setVisible, self.ptr, state as _)
     }
 
     pub fn visible(&mut self) -> Visibility {
-        let visible = invoke_unsafe!(sprite.isVisible, self.0);
+        let visible = invoke_unsafe!(sprite.isVisible, self.ptr);
         if visible == 1 {
             Visibility::Visible
         } else {
@@ -416,23 +438,23 @@ impl Sprite {
     }
 
     pub fn set_opaque(&mut self, state: Opaqueness) {
-        invoke_unsafe!(sprite.setOpaque, self.0, state as _)
+        invoke_unsafe!(sprite.setOpaque, self.ptr, state as _)
     }
 
     pub fn mark_dirty(&mut self) {
-        invoke_unsafe!(sprite.markDirty, self.0)
+        invoke_unsafe!(sprite.markDirty, self.ptr)
     }
 
     pub fn set_ignores_draw_offset(&mut self, offset_behavior: OffsetBehavior) {
-        invoke_unsafe!(sprite.setIgnoresDrawOffset, self.0, offset_behavior as _)
+        invoke_unsafe!(sprite.setIgnoresDrawOffset, self.ptr, offset_behavior as _)
     }
 
     pub fn set_collisions_enabled(&mut self, enabled: CollisionState) {
-        invoke_unsafe!(sprite.setCollisionsEnabled, self.0, enabled as _)
+        invoke_unsafe!(sprite.setCollisionsEnabled, self.ptr, enabled as _)
     }
 
     pub fn collisions_enabled(&self) -> CollisionState {
-        let enabled = invoke_unsafe!(sprite.collisionsEnabled, self.0);
+        let enabled = invoke_unsafe!(sprite.collisionsEnabled, self.ptr);
         if enabled == 1 {
             CollisionState::Enabled
         } else {
@@ -441,24 +463,24 @@ impl Sprite {
     }
 
     pub fn set_collide_rect(&mut self, rect: Rect) {
-        invoke_unsafe!(sprite.setCollideRect, self.0, rect)
+        invoke_unsafe!(sprite.setCollideRect, self.ptr, rect)
     }
 
     pub fn collide_rect(&self) -> Rect {
-        invoke_unsafe!(sprite.getCollideRect, self.0)
+        invoke_unsafe!(sprite.getCollideRect, self.ptr)
     }
 
     pub fn clear_collide_rect(&self) {
-        invoke_unsafe!(sprite.clearCollideRect, self.0)
+        invoke_unsafe!(sprite.clearCollideRect, self.ptr)
     }
 
-    pub fn check_collisions(&self, goal_x: f32, goal_y: f32) -> Vec<SpriteCollisionInfo> {
+    pub fn check_collisions(&self, goal_x: f32, goal_y: f32) -> Vec<SpriteCollisionInfo<T>> {
         let mut len = 0;
         let mut actual_x = 0.0;
         let mut actual_y = 0.0;
         let ptr = invoke_unsafe!(
             sprite.checkCollisions,
-            self.0,
+            self.ptr,
             goal_x,
             goal_y,
             &mut actual_x,
@@ -471,7 +493,7 @@ impl Sprite {
 
         for i in 0..len {
             let val = &unsafe { *ptr.offset(i) };
-            let other_sprite = ManuallyDrop::new(Sprite(val.other));
+            let other_sprite = ManuallyDrop::new(Sprite::from_ptr(val.other));
             let overlaps = if val.overlaps == 1 {
                 SpriteOverlap::Overlapping
             } else {
@@ -503,14 +525,14 @@ impl Sprite {
 
     pub fn move_with_collisions<F>(&mut self, goal_x: f32, goal_y: f32, mut f: F)
     where
-        F: FnMut(&mut Sprite, &mut [SpriteCollisionInfo]),
+        F: FnMut(&mut Sprite<T>, &mut [SpriteCollisionInfo<T>]),
     {
         let mut len = 0;
         let mut actual_x = 0.0;
         let mut actual_y = 0.0;
         let ptr = invoke_unsafe!(
             sprite.moveWithCollisions,
-            self.0,
+            self.ptr,
             goal_x,
             goal_y,
             &mut actual_x,
@@ -523,7 +545,7 @@ impl Sprite {
 
         for i in 0..len {
             let val = &unsafe { *ptr.offset(i) };
-            let mut other_sprite = ManuallyDrop::new(Sprite(val.other));
+            let mut other_sprite = ManuallyDrop::new(Sprite::from_ptr(val.other));
             let overlaps = if val.overlaps == 1 {
                 SpriteOverlap::Overlapping
             } else {
@@ -560,17 +582,20 @@ impl Sprite {
     // }
 }
 
-pub struct SpriteBuilder {
-    sprite: Sprite,
+pub struct SpriteBuilder<T> {
+    sprite: Sprite<T>,
 }
 
-impl SpriteBuilder {
-    pub(crate) fn new(game_object: *mut dyn GameObject) -> Self {
+impl<T> SpriteBuilder<T>
+where
+    T: 'static,
+{
+    pub(crate) fn new(game_object: *mut dyn GameObject<T>) -> Self {
         let sprite = Sprite::new(game_object);
         Self { sprite }
     }
 
-    pub fn build(self) -> Sprite {
+    pub fn build(self) -> Sprite<T> {
         self.sprite
     }
 
@@ -610,21 +635,21 @@ impl SpriteBuilder {
     }
 }
 
-pub trait GameObject: Any {
-    fn init(&mut self, builder: SpriteBuilder) -> Sprite;
+pub trait GameObject<T>: Any {
+    fn init(&mut self, builder: SpriteBuilder<T>, pd: &mut Playdate<T>) -> Sprite<T>;
 
     #[allow(unused_variables)]
-    fn update(&mut self, ctx: UpdateContext) -> Persistance {
+    fn update(&mut self, ctx: UpdateContext<T>) -> Persistance {
         Persistance::Keep
     }
 
     #[allow(unused_variables)]
-    fn collide(&mut self, ctx: CollisionContext) -> CollisionResponse {
+    fn collide(&mut self, ctx: CollisionContext<T>) -> CollisionResponse {
         CollisionResponse::Overlap
     }
 
     #[allow(unused_variables)]
-    fn draw(&mut self, ctx: DrawContext) {}
+    fn draw(&mut self, ctx: DrawContext<T>) {}
 
     fn destroy(&mut self) {}
 }
@@ -634,27 +659,36 @@ pub enum Persistance {
     Destroy,
 }
 
-pub struct UpdateContext<'a> {
-    pub sprite: &'a mut Sprite,
-    pub pd: &'a mut Playdate,
+pub struct UpdateContext<'a, T>
+where
+    T: 'static,
+{
+    pub sprite: &'a mut Sprite<T>,
+    pub pd: &'a mut Playdate<T>,
 }
 
-pub struct CollisionContext<'a> {
-    pub self_sprite: &'a mut Sprite,
-    pub other: &'a mut dyn GameObject,
-    pub other_sprite: &'a mut Sprite,
-    pub pd: &'a mut Playdate,
+pub struct CollisionContext<'a, T>
+where
+    T: 'static,
+{
+    pub self_sprite: &'a mut Sprite<T>,
+    pub other: &'a mut dyn GameObject<T>,
+    pub other_sprite: &'a mut Sprite<T>,
+    pub pd: &'a mut Playdate<T>,
 }
 
-pub struct DrawContext<'a> {
-    pub sprite: &'a Sprite,
+pub struct DrawContext<'a, T>
+where
+    T: 'static,
+{
+    pub sprite: &'a Sprite<T>,
     pub bounds: &'a Rect,
     pub draw_rect: &'a Rect,
-    pub pd: &'a mut Playdate,
+    pub pd: &'a mut Playdate<T>,
 }
 
-pub struct SpriteCollisionInfo {
-    pub other_sprite: ManuallyDrop<Sprite>,
+pub struct SpriteCollisionInfo<T> {
+    pub other_sprite: ManuallyDrop<Sprite<T>>,
     pub other: ManuallyDrop<Box<dyn Any>>,
     pub response_type: CollisionResponse,
     pub overlaps: SpriteOverlap,
@@ -694,21 +728,21 @@ impl From<SpriteCollisionResponseType> for CollisionResponse {
     }
 }
 
-impl Drop for Sprite {
+impl<T> Drop for Sprite<T> {
     fn drop(&mut self) {
-        let data_ptr = invoke_unsafe!(sprite.getUserdata, self.0) as *mut SpriteData;
+        let data_ptr = invoke_unsafe!(sprite.getUserdata, self.ptr) as *mut SpriteData<T>;
         let data = unsafe { Box::from_raw(data_ptr) };
 
         // Remove from display list if we're in it
         if data.displayed {
-            invoke_unsafe!(sprite.removeSprite, self.0);
+            invoke_unsafe!(sprite.removeSprite, self.ptr);
         }
 
         // drop the game object
         drop(unsafe { Box::from_raw(data.game_object) });
 
-        invoke_unsafe!(sprite.setUserdata, self.0, null_mut());
-        invoke_unsafe!(sprite.freeSprite, self.0);
+        invoke_unsafe!(sprite.setUserdata, self.ptr, null_mut());
+        invoke_unsafe!(sprite.freeSprite, self.ptr);
 
         // drop the user data
         // it would be done automatically anyway, but make it explicit to be safe

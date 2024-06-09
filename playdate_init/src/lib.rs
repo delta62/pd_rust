@@ -10,6 +10,7 @@ struct MacroArgs {
     struct_ident: Ident,
     init_ident: Ident,
     update_ident: Ident,
+    state_ident: Option<Ident>,
 }
 
 #[proc_macro_attribute]
@@ -20,10 +21,15 @@ pub fn pd_app(attr: TokenStream, item: TokenStream) -> TokenStream {
     let struct_ident = struct_meta.ident.clone();
     let init_ident = Ident::new(&args.init_name, Span::call_site());
     let update_ident = Ident::new(&args.update_name, Span::call_site());
+    let state_ident = args
+        .state_name
+        .as_ref()
+        .map(|state_name| Ident::new(state_name, Span::call_site()));
     let args = MacroArgs {
         struct_ident,
         update_ident,
         init_ident,
+        state_ident,
     };
 
     let panic = panic_handler();
@@ -44,9 +50,19 @@ fn init(args: &MacroArgs) -> proc_macro2::TokenStream {
     let MacroArgs {
         init_ident,
         struct_ident,
+        state_ident,
         ..
     } = args;
+    let state = if let Some(state_ident) = state_ident {
+        quote! {
+            #state_ident::init(&mut unsafe { ::playdate::Playdate::init() })
+        }
+    } else {
+        quote! { () }
+    };
+
     quote! {
+        use playdate::PlaydateState;
         struct PlaydateAppUserData {
             api: *mut ::playdate_sys::PlaydateAPI,
             app: #struct_ident,
@@ -66,7 +82,9 @@ fn init(args: &MacroArgs) -> proc_macro2::TokenStream {
 
             unsafe { ::playdate::PD = api };
 
-            let mut pd = unsafe { ::playdate::Playdate::new(api) };
+            // let state = #state_ident::init(&mut unsafe { ::playdate::Playdate::init() });
+            let state = #state;
+            let mut pd = unsafe { ::playdate::Playdate::new(api, Box::new(state)) };
             let app = #struct_ident::#init_ident(&mut pd);
 
             let app_data = Box::new(PlaydateAppUserData { api, app });
@@ -95,7 +113,7 @@ fn update(args: &MacroArgs) -> proc_macro2::TokenStream {
             // unsafe { log(cstr!("update").as_ptr()) };
 
             let mut app_data = unsafe { ::alloc::boxed::Box::from_raw(ptr) };
-            let mut pd = unsafe { ::playdate::Playdate::new(app_data.api) };
+            let mut pd = unsafe { ::playdate::Playdate::init() };
             let frame_result = app_data.app.#update_ident(&mut pd);
             ::core::mem::forget(app_data);
             frame_result as i32

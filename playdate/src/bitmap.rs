@@ -21,13 +21,13 @@ pub struct Bitmap {
 }
 
 impl Bitmap {
-    pub fn new(width: i32, height: i32, bg_color: Color) -> Self {
+    pub(crate) fn new(width: i32, height: i32, bg_color: Color) -> Self {
         let ptr = invoke_unsafe!(graphics.newBitmap, width, height, bg_color as _);
         let mask = None;
         Self { ptr, mask }
     }
 
-    pub fn load(path: &CStr) -> Result<Self> {
+    pub(crate) fn load(path: &CStr) -> Result<Self> {
         let mut err = null();
         let ptr = invoke_unsafe!(graphics.loadBitmap, path.as_ptr(), &mut err);
         let mask = None;
@@ -41,7 +41,7 @@ impl Bitmap {
         Ok(Self { ptr, mask })
     }
 
-    pub fn rotated(bitmap: &Bitmap, rotation: f32, x_scale: f32, y_scale: f32) -> Self {
+    pub(crate) fn rotated(bitmap: &Bitmap, rotation: f32, x_scale: f32, y_scale: f32) -> Self {
         let mask = None;
         let mut allocated_size = 0;
         let ptr = invoke_unsafe!(

@@ -1,24 +1,15 @@
 use crate::{enemy_plane::EnemyPlane, state::State};
 use alloc::rc::Rc;
-use core::cell::RefCell;
 use playdate::{
-    cstr, Bitmap, BitmapFlip, ButtonState, Buttons, GameObject, Persistance, Point, Rect, Sprite,
+    cstr, BitmapFlip, ButtonState, Buttons, GameObject, Persistance, Playdate, Point, Rect, Sprite,
     SpriteBuilder, UpdateContext,
 };
 
-pub struct Player {
-    state: Rc<RefCell<State>>,
-}
+pub struct Player;
 
-impl Player {
-    pub fn new(state: Rc<RefCell<State>>) -> Self {
-        Self { state }
-    }
-}
-
-impl GameObject for Player {
-    fn init(&mut self, builder: SpriteBuilder) -> Sprite {
-        let player_image = Bitmap::load(cstr!("images/player")).unwrap();
+impl GameObject<State> for Player {
+    fn init(&mut self, builder: SpriteBuilder<State>, pd: &mut Playdate<State>) -> Sprite<State> {
+        let player_image = pd.graphics().load_bitmap(cstr!("images/player")).unwrap();
         let player_image = Rc::new(player_image);
         let bitmap_data = player_image.data();
 
@@ -36,7 +27,7 @@ impl GameObject for Player {
             .build()
     }
 
-    fn update(&mut self, ctx: UpdateContext) -> Persistance {
+    fn update(&mut self, ctx: UpdateContext<State>) -> Persistance {
         let UpdateContext { pd, sprite } = ctx;
         let Buttons { current, .. } = pd.system().button_state();
 
@@ -59,8 +50,7 @@ impl GameObject for Player {
         sprite.move_with_collisions(x + dx, y + dy, |_sprite, collisions| {
             for collision in collisions {
                 if let Some(enemy) = collision.other.downcast_mut::<EnemyPlane>() {
-                    let mut state = self.state.borrow_mut();
-                    state.score -= 1;
+                    pd.data_mut().score -= 1;
                     enemy.set_hit();
                 }
             }

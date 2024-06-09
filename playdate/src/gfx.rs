@@ -1,5 +1,6 @@
 use crate::{
     bitmap::{Bitmap, BitmapFlip},
+    error::Result,
     font::{Font, TextEncoding},
     sprite::{DrawMode, TileMode},
 };
@@ -29,6 +30,24 @@ impl Graphics {
             stencil: Default::default(),
             context_stack: Default::default(),
         }
+    }
+
+    pub fn new_bitmap(&self, width: i32, height: i32, bg_color: Color) -> Bitmap {
+        Bitmap::new(width, height, bg_color)
+    }
+
+    pub fn load_bitmap(&self, path: &CStr) -> Result<Bitmap> {
+        Bitmap::load(path)
+    }
+
+    pub fn rotated_bitmap(
+        &self,
+        bitmap: &Bitmap,
+        rotation: f32,
+        x_scale: f32,
+        y_scale: f32,
+    ) -> Bitmap {
+        Bitmap::rotated(bitmap, rotation, x_scale, y_scale)
     }
 
     pub fn push_context(&mut self, context: Option<Bitmap>) {

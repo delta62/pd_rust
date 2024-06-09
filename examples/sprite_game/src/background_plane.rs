@@ -1,23 +1,13 @@
 use crate::state::State;
-use alloc::rc::Rc;
-use core::cell::RefCell;
 use playdate::{
-    rng, BitmapFlip, GameObject, Persistance, Point, Sprite, SpriteBuilder, UpdateContext,
+    rng, BitmapFlip, GameObject, Persistance, Playdate, Point, Sprite, SpriteBuilder, UpdateContext,
 };
 
-pub struct BackgroundPlane {
-    state: Rc<RefCell<State>>,
-}
+pub struct BackgroundPlane;
 
-impl BackgroundPlane {
-    pub fn new(state: Rc<RefCell<State>>) -> Self {
-        Self { state }
-    }
-}
-
-impl GameObject for BackgroundPlane {
-    fn init(&mut self, builder: SpriteBuilder) -> Sprite {
-        let mut state = self.state.borrow_mut();
+impl GameObject<State> for BackgroundPlane {
+    fn init(&mut self, builder: SpriteBuilder<State>, pd: &mut Playdate<State>) -> Sprite<State> {
+        let state = pd.data_mut();
         let data = state.background_plane_image.data();
 
         state.background_plane_count += 1;
@@ -36,8 +26,8 @@ impl GameObject for BackgroundPlane {
             .build()
     }
 
-    fn update(&mut self, ctx: UpdateContext) -> Persistance {
-        let mut state = self.state.borrow_mut();
+    fn update(&mut self, ctx: UpdateContext<State>) -> Persistance {
+        let state = ctx.pd.data_mut();
         let Point { x, y } = ctx.sprite.position();
         let new_y = y + 2.0;
 

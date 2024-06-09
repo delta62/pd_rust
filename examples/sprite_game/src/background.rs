@@ -1,6 +1,7 @@
+use crate::state::State;
 use alloc::rc::Rc;
 use playdate::{
-    cstr, Bitmap, BitmapFlip, DrawContext, GameObject, Persistance, Rect, Sprite, SpriteBuilder,
+    cstr, BitmapFlip, DrawContext, GameObject, Persistance, Playdate, Rect, Sprite, SpriteBuilder,
     UpdateContext,
 };
 
@@ -10,9 +11,12 @@ pub struct Background {
     y: i32,
 }
 
-impl GameObject for Background {
-    fn init(&mut self, builder: SpriteBuilder) -> Sprite {
-        let bg_image = Bitmap::load(cstr!("images/background")).unwrap();
+impl GameObject<State> for Background {
+    fn init(&mut self, builder: SpriteBuilder<State>, pd: &mut Playdate<State>) -> Sprite<State> {
+        let bg_image = pd
+            .graphics()
+            .load_bitmap(cstr!("images/background"))
+            .unwrap();
         let bg_image = Rc::new(bg_image);
         let bitmap_data = bg_image.data();
 
@@ -31,13 +35,13 @@ impl GameObject for Background {
             .build()
     }
 
-    fn draw(&mut self, ctx: DrawContext) {
+    fn draw(&mut self, ctx: DrawContext<State>) {
         let bg_image = ctx.sprite.image().unwrap();
         bg_image.draw(0, self.y, BitmapFlip::Unflipped);
         bg_image.draw(0, self.y - self.height, BitmapFlip::Unflipped);
     }
 
-    fn update(&mut self, ctx: UpdateContext) -> Persistance {
+    fn update(&mut self, ctx: UpdateContext<State>) -> Persistance {
         self.y += 1;
         if self.y > self.height {
             self.y = 0;

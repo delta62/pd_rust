@@ -1,24 +1,14 @@
 use crate::{enemy_plane::EnemyPlane, state::State};
-use alloc::rc::Rc;
-use core::cell::RefCell;
 use playdate::{
-    BitmapData, BitmapFlip, GameObject, Persistance, Point, Rect, Sprite, SpriteBuilder,
+    BitmapData, BitmapFlip, GameObject, Persistance, Playdate, Point, Rect, Sprite, SpriteBuilder,
     UpdateContext,
 };
 
-pub struct Bullet {
-    state: Rc<RefCell<State>>,
-}
+pub struct Bullet;
 
-impl Bullet {
-    pub fn new(state: Rc<RefCell<State>>) -> Self {
-        Self { state }
-    }
-}
-
-impl GameObject for Bullet {
-    fn init(&mut self, builder: SpriteBuilder) -> Sprite {
-        let state = self.state.borrow();
+impl GameObject<State> for Bullet {
+    fn init(&mut self, builder: SpriteBuilder<State>, pd: &mut Playdate<State>) -> Sprite<State> {
+        let state = pd.data();
 
         let BitmapData { width, .. } = state.bullet_image.data();
 
@@ -41,8 +31,9 @@ impl GameObject for Bullet {
             .build()
     }
 
-    fn update(&mut self, ctx: UpdateContext) -> Persistance {
-        let bullet_height = self.state.borrow().bullet_height;
+    fn update(&mut self, ctx: UpdateContext<State>) -> Persistance {
+        let state = ctx.pd.data_mut();
+        let bullet_height = state.bullet_height;
         let Point { x, y } = ctx.sprite.position();
         let new_y = y - 20.0;
 
@@ -55,7 +46,6 @@ impl GameObject for Bullet {
             .move_with_collisions(x, new_y, |_sprite, collisions| {
                 for collision in collisions {
                     if let Some(enemy) = collision.other.downcast_mut::<EnemyPlane>() {
-                        let mut state = self.state.borrow_mut();
                         hit = true;
                         state.score += 1;
                         enemy.set_hit();

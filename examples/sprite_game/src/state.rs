@@ -1,5 +1,5 @@
 use alloc::{rc::Rc, vec::Vec};
-use playdate::{cstr, format_string, Bitmap, Playdate, Rect};
+use playdate::{cstr, format_string, Bitmap, Playdate, PlaydateState, Rect};
 
 pub struct State {
     pub score: u32,
@@ -19,18 +19,19 @@ pub struct State {
     pub background_plane_image: Rc<Bitmap>,
 }
 
-impl State {
-    pub fn new(_pd: &mut Playdate) -> Self {
+impl PlaydateState for State {
+    fn init(pd: &mut Playdate<()>) -> Self {
+        let gfx = pd.graphics();
         let mut explosion_images = Vec::with_capacity(8);
         for i in 0..8 {
             let path = format_string!(cstr!("images/explosion/%d"), i + 1);
-            let image = Bitmap::load(&path).unwrap();
+            let image = gfx.load_bitmap(&path).unwrap();
             explosion_images.push(Rc::new(image));
         }
 
-        let enemy_plane_image = Rc::new(Bitmap::load(cstr!("images/plane1")).unwrap());
-        let background_plane_image = Rc::new(Bitmap::load(cstr!("images/plane2")).unwrap());
-        let bullet_image = Rc::new(Bitmap::load(cstr!("images/doubleBullet")).unwrap());
+        let enemy_plane_image = Rc::new(gfx.load_bitmap(cstr!("images/plane1")).unwrap());
+        let background_plane_image = Rc::new(gfx.load_bitmap(cstr!("images/plane2")).unwrap());
+        let bullet_image = Rc::new(gfx.load_bitmap(cstr!("images/doubleBullet")).unwrap());
 
         let bullet_height = bullet_image.data().height as f32;
         let enemy_plane_height = enemy_plane_image.data().height as f32;

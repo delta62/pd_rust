@@ -1,25 +1,24 @@
 use crate::state::State;
-use alloc::rc::Rc;
-use core::cell::RefCell;
-use playdate::{BitmapFlip, GameObject, Persistance, Sprite, SpriteBuilder, UpdateContext};
+use playdate::{
+    BitmapFlip, GameObject, Persistance, Playdate, Sprite, SpriteBuilder, UpdateContext,
+};
 
 pub struct Explosion {
-    state: Rc<RefCell<State>>,
     frame: usize,
     x: f32,
     y: f32,
 }
 
 impl Explosion {
-    pub fn new(x: f32, y: f32, state: Rc<RefCell<State>>) -> Self {
+    pub fn new(x: f32, y: f32) -> Self {
         let frame = 0;
-        Self { x, y, frame, state }
+        Self { x, y, frame }
     }
 }
 
-impl GameObject for Explosion {
-    fn init(&mut self, builder: SpriteBuilder) -> Sprite {
-        let state = self.state.borrow();
+impl GameObject<State> for Explosion {
+    fn init(&mut self, builder: SpriteBuilder<State>, pd: &mut Playdate<State>) -> Sprite<State> {
+        let state = pd.data();
 
         builder
             .image(state.explosion_images[0].clone(), BitmapFlip::Unflipped)
@@ -30,8 +29,8 @@ impl GameObject for Explosion {
             .build()
     }
 
-    fn update(&mut self, ctx: UpdateContext) -> Persistance {
-        let state = self.state.borrow();
+    fn update(&mut self, ctx: UpdateContext<State>) -> Persistance {
+        let state = ctx.pd.data();
         self.frame += 1;
 
         if self.frame > 7 {
